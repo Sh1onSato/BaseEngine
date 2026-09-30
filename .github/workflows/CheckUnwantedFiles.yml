@@ -1,0 +1,56 @@
+name: CheckUnwantedFiles
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+
+env:
+  UNWANTED_NAME_PATTERNS: "*.pdf *.ilk *.user *.ncb *.suo *.log *.dmp *.zip imgui.ini desktop.ini dxcompiler.dll dxil.dll"
+  UNWANTED_DIR_PATTERNS: "generated x64 win32 arm64 .vs bin ipch logs Dump"
+
+jobs:
+  check-files:
+    name: 不要なファイルを検索
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: リポジトリをチェックアウト
+        uses: actions/checkout@v4
+      
+      - name: 不要なファイルとディレクトリを検索(bash)
+        run: |
+          # ディレクトリ条件の構築
+          DIR_CONDITIONS=()
+          for pattern in $UNWANTED_DIR_PATTERNS; do
+            DIR_CONDITIONS+=(-o -iname "$pattern")
+          done
+          
+          # ファイル名条件の構築
+          NAME_CONDITIONS=()
+          for pattern in $UNWANTED_NAME_PATTERNS; do
+            NAME_CONDITIONS+=(-o -iname "$pattern")
+          done
+
+          # 最初の -o を削除
+          unset DIR_CONDITIONS[0]
+          unset NAME_CONDITIONS[0]
+
+          # find実行
+          # 1. .gitを除外
+          # 2. 不要ディレクトリを検出し、中身を探索せずに出力(prune)
+          # 3. 不要ファイルを検出
+          UNWANTED_LIST=$(find . -path "./.git" -prune -o \
+            \( \( "${DIR_CONDITIONS[@]}" \) -a -type d -print -prune \) -o \
+            \( \( "${NAME_CONDITIONS[@]}" \) -a -type f -print \) \
+          )
+
+          if [ -n "$UNWANTED_LIST" ]; then
+            echo "::error::不要なファイルまたはディレクトリが見つかりました！"
+            echo "--- 見つかった項目 ---"
+            echo "$UNWANTED_LIST"
+            exit 1
+          fi
+
+          echo "リポジトリはクリーンです。"
