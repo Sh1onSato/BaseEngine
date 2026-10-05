@@ -22,6 +22,7 @@ public:
 
     // ゲッター
     IXAudio2* GetXAudio2() const { return xAudio2.Get(); }
+    IXAudio2MasteringVoice* GetMasteringVoice() const { return masteringVoice; }
 
 private:
     AudioCommon() = default;

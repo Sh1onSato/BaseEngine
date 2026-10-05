@@ -1,6 +1,7 @@
 #include "Framework.h"
 #include "ModelManager.h"
 #include "CameraManager.h"
+#include "GameSettings.h"
 
 Framework* Framework::instance = nullptr;
 
@@ -46,6 +47,9 @@ void Framework::Initialize() {
 	input->Initialize(winApp.get());
 
 	AudioManager::GetInstance()->Initialize();
+	// 保存済みの設定（音量など）を読み込んでAudioManagerへ反映
+	GameSettings::GetInstance()->Load();
+	winApp->SetFullscreen(GameSettings::GetInstance()->GetFullscreen());
 #ifdef _DEBUG
 	// ImGuiはDebugビルドのみ初期化する（Release/Developmentでは調整UIとして使えないようにするため）
 	ImGuiManager::GetInstance()->Initialize(winApp.get(), dxCommon.get(), srvManager.get());
@@ -69,10 +73,17 @@ void Framework::Initialize() {
 	CameraManager::GetInstance()->Initialize();
 
 	sceneManager = std::make_unique<SceneManager>();
+	sceneManager->Initialize(spriteCommon.get());
+
+	// 初期化にかかった時間が最初のdeltaTimeに乗らないよう、最後に計測を開始する
+	Time::Initialize();
 }
 
 void Framework::Update() {
+	Time::Tick();
 	input->Update();
+	// フェードはポーズ(timeScale=0)中も進めたいのでunscaledを使う
+	AudioManager::GetInstance()->Update(Time::GetUnscaledDeltaTime());
 #ifdef _DEBUG
 	ImGuiManager::GetInstance()->Begin();
 #endif
@@ -88,6 +99,9 @@ void Framework::Finalize() {
 
 	// 解放処理（unique_ptr が自動で行うため delete は不要）
 	
+	// 設定画面で変えた値を次回起動時に引き継ぐ
+	GameSettings::GetInstance()->SetFullscreen(winApp->IsFullscreen());
+	GameSettings::GetInstance()->Save();
 	AudioManager::GetInstance()->Finalize();
 #ifdef _DEBUG
 	ImGuiManager::GetInstance()->Finalize();

@@ -11,6 +11,7 @@
 #include "SceneManager.h"
 #include "ImGuiManager.h"
 #include "AudioManager.h"
+#include "GameTime.h"
 
 #include <memory>
 
@@ -50,6 +51,7 @@ public:
 	Object3dCommon* GetObject3dCommon() const { return object3dCommon.get(); }
 	ParticleCommon* GetParticleCommon() const { return particleCommon.get(); }
 	SkyboxCommon* GetSkyboxCommon() const { return skyboxCommon.get(); }
+	SceneManager* GetSceneManager() const { return sceneManager.get(); }
 
 protected:
 	std::unique_ptr<WinApp> winApp = nullptr;

@@ -203,6 +203,64 @@ void TextureManager::LoadTexture(const std::string& filePath){
 
 }
 
+uint32_t TextureManager::CreateOrUpdateTexture(const std::string& name, uint32_t width, uint32_t height, const uint8_t* rgbaPixels) {
+	assert(width > 0 && height > 0);
+
+	DirectX::ScratchImage image{};
+	HRESULT hr = image.Initialize2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 1, 1);
+	assert(SUCCEEDED(hr));
+	std::memcpy(image.GetPixels(), rgbaPixels, static_cast<size_t>(width) * height * 4);
+
+	auto it = std::find_if(textureDatas.begin(), textureDatas.end(), [&](TextureData& d) { return d.filePath == name; });
+	bool isNew = it == textureDatas.end();
+	if (isNew) {
+		assert(textureDatas.size() < SrvManager::kMaxSRVCount);
+		textureDatas.resize(textureDatas.size() + 1);
+		it = textureDatas.end() - 1;
+		it->filePath = name;
+		it->srvIndex = srvManager->Allocate();
+	}
+	TextureData& textureData = *it;
+
+	bool sameSize = !isNew && textureData.metadata.width == width && textureData.metadata.height == height;
+	if (sameSize) {
+		// 同じサイズなら既存のリソースに上書きする（UploadTextureDataはCOPY_DEST前提なので戻しておく）
+		D3D12_RESOURCE_BARRIER barrier{};
+		barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+		barrier.Transition.pResource = textureData.resource.Get();
+		barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+		barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_GENERIC_READ;
+		barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+		dxCommon->GetCommandList()->ResourceBarrier(1, &barrier);
+	} else {
+		// サイズが変わる場合は作り直し、同じSRV番号にビューを作り直す
+		// （前フレームの描画はPostDraw()でGPU完了を待っているので、古いリソースを解放しても安全）
+		textureData.metadata = image.GetMetadata();
+		textureData.resource = CreateTextureResource(dxCommon->GetDevice(), textureData.metadata);
+		srvManager->CreateSRVForTexture2D(textureData.srvIndex, textureData.resource.Get(), textureData.metadata.format, 1);
+	}
+
+	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource = dxCommon->UploadTextureData(textureData.resource.Get(), image, dxCommon);
+	ExecuteUploadAndWait();
+
+	return static_cast<uint32_t>(std::distance(textureDatas.begin(), it));
+}
+
+bool TextureManager::HasTexture(const std::string& filePath) const {
+	return std::any_of(textureDatas.begin(), textureDatas.end(), [&](const TextureData& d) { return d.filePath == filePath; });
+}
+
+void TextureManager::ExecuteUploadAndWait() {
+	HRESULT hr = dxCommon->GetCommandList()->Close();
+	assert(SUCCEEDED(hr));
+	ID3D12CommandList* commandLists[] = { dxCommon->GetCommandList() };
+	dxCommon->GetCommandQueue()->ExecuteCommandLists(1, commandLists);
+	dxCommon->WaitForGpu();
+
+	hr = dxCommon->GetCommandAllocator()->Reset(); assert(SUCCEEDED(hr));
+	hr = dxCommon->GetCommandList()->Reset(dxCommon->GetCommandAllocator(), nullptr); assert(SUCCEEDED(hr));
+}
+
 uint32_t TextureManager::GetTextureIndexByFilePath(const std::string& filePath){
 	auto it = std::find_if(
 		textureDatas.begin(),

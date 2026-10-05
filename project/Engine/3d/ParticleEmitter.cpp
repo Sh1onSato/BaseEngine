@@ -1,4 +1,5 @@
 #include "ParticleEmitter.h"
+#include "GameTime.h"
 #include <random>
 #include <cmath>
 
@@ -14,7 +15,7 @@ void ParticleEmitter::Initialize(const std::string& name, ParticleManager* manag
 }
 
 void ParticleEmitter::Update() {
-    timer += Calculation::kFixedDeltaTime; // 暫定固定フレームレート前提（本来は実フレーム時間を受け取るべき）
+    timer += Time::GetDeltaTime();
 
     if (timer >= setting.frequency) {
         timer -= setting.frequency;

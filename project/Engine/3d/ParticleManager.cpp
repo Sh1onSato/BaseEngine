@@ -1,6 +1,7 @@
 #include "ParticleManager.h"
 #include "CameraManager.h"
 #include "Framework.h"
+#include "GameTime.h"
 #include <random>
 #include <algorithm>
 #include <cmath>
@@ -97,32 +98,37 @@ void ParticleManager::Update() {
     Matrix4x4 viewProjectionMatrix = camera ? camera->GetViewProjectionMatrix() : Calculation::MakeIdentity4x4();
     Matrix4x4 viewMatrix = camera ? camera->GetViewMatrix() : Calculation::MakeIdentity4x4();
 
+    const float deltaTime = Time::GetDeltaTime();
+    // velocity/gravity/dragは「60FPSでの1フレームあたりの量」で調整されているため、
+    // 実フレーム時間を60FPS換算のフレーム数に直して掛ける（60FPS時は1.0で従来と同じ挙動）
+    const float frameScale = deltaTime * 60.0f;
+
     instanceCount = 0;
     for (auto it = particles.begin(); it != particles.end(); ) {
         // 寿命チェック
-        it->currentTime += Calculation::kFixedDeltaTime; // 暫定固定フレームレート前提（本来は実フレーム時間を受け取るべき）
+        it->currentTime += deltaTime;
         if (it->currentTime >= it->lifeTime) {
             it = particles.erase(it);
             continue;
         }
 
-        // 空気抵抗（毎フレーム速度を減衰させる。値が大きいほど急激に減速する）
+        // 空気抵抗（1フレームあたりdrag割合ずつ速度を減衰させる。値が大きいほど急激に減速する）
         if (it->drag > 0.0f) {
-            float dragFactor = (std::max)(0.0f, 1.0f - it->drag);
+            float dragFactor = std::pow((std::max)(0.0f, 1.0f - it->drag), frameScale);
             it->velocity.x *= dragFactor;
             it->velocity.y *= dragFactor;
             it->velocity.z *= dragFactor;
         }
 
-        // 重力（毎フレーム速度に加算）
-        it->velocity.x += it->gravity.x;
-        it->velocity.y += it->gravity.y;
-        it->velocity.z += it->gravity.z;
+        // 重力（速度に加算）
+        it->velocity.x += it->gravity.x * frameScale;
+        it->velocity.y += it->gravity.y * frameScale;
+        it->velocity.z += it->gravity.z * frameScale;
 
         // 移動
-        it->transform.translate.x += it->velocity.x;
-        it->transform.translate.y += it->velocity.y;
-        it->transform.translate.z += it->velocity.z;
+        it->transform.translate.x += it->velocity.x * frameScale;
+        it->transform.translate.y += it->velocity.y * frameScale;
+        it->transform.translate.z += it->velocity.z * frameScale;
 
         // 経過割合 (0.0〜1.0)
         float t = it->currentTime / it->lifeTime;

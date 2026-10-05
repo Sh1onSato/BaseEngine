@@ -1,5 +1,6 @@
 #include "SkinnedObject3d.h"
 #include "Calculation.h"
+#include "GameTime.h"
 #include <cmath>
 
 void SkinnedObject3d::Initialize(Object3dCommon* common) {
@@ -15,7 +16,7 @@ void SkinnedObject3d::SetGltfData(DirectXCommon* dxCommon, const GltfModelData* 
 
 void SkinnedObject3d::Update() {
     if (gltfData) {
-        animationTime += Calculation::kFixedDeltaTime;
+        animationTime += Time::GetDeltaTime();
         if (isLooping && animation.GetDuration() > 0.0f) {
             animationTime = std::fmod(animationTime, animation.GetDuration());
         }

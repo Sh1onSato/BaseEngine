@@ -87,6 +87,17 @@ public:
 	/// </summary>
 	void CreateInternalDigitFontTexture();
 
+	/// <summary>
+	/// RGBA8(1ピクセル4バイト、上の行から順)のピクセル列から名前付きテクスチャを作成する。同名が既にあれば中身を差し替える
+	/// （サイズが変わってもSRVの番号は変わらないので、Spriteは作り直さなくてよい）。
+	/// テキスト描画や動的に生成する画像用。GPUへの転送を即時実行するため、描画中(PreDraw〜PostDraw)には呼ばないこと
+	/// </summary>
+	/// <returns>テクスチャ番号</returns>
+	uint32_t CreateOrUpdateTexture(const std::string& name, uint32_t width, uint32_t height, const uint8_t* rgbaPixels);
+
+	// 読み込み済みか
+	bool HasTexture(const std::string& filePath) const;
+
 	uint32_t GetTextureIndexByFilePath(const std::string& filePath);
 	uint32_t GetSrvIndex(uint32_t textureIndex) const;
 	D3D12_GPU_DESCRIPTOR_HANDLE GetSrvHandleGPU(uint32_t textureIndex);
@@ -113,6 +124,9 @@ private:
 		uint32_t srvIndex;
 	};
 	std::vector<TextureData> textureDatas;
+
+	// コマンドリストを閉じて実行し、GPUの完了を待ってから次のフレーム用にリセットする（テクスチャ転送用）
+	void ExecuteUploadAndWait();
 
 
 	

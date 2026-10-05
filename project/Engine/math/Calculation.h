@@ -14,10 +14,6 @@ public:
 	// 円周率（各所で桁数の違う値がバラバラに直書きされていたのをここに集約）
 	static constexpr float kPi = std::numbers::pi_v<float>;
 
-	// 固定フレームレート前提の暫定デルタタイム（本来は実フレーム時間を受け取るのが望ましいが、
-	// 現状複数箇所が「暫定60FPS」を個別にハードコードしていたためここに集約）
-	static constexpr float kFixedDeltaTime = 1.0f / 60.0f;
-
 	// ベクトル演算
 	static Vector3 Add(const Vector3& a, const Vector3& b) { return a + b; }
 	static Vector3 Subtract(const Vector3& a, const Vector3& b) { return a - b; }

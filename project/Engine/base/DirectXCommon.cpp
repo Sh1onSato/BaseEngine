@@ -78,6 +78,8 @@ void DirectXCommon::Initialize(WinApp* winApp) {
     swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
     hr = dxgiFactory->CreateSwapChainForHwnd(commandQueue.Get(), winApp->GetHwnd(), &swapChainDesc, nullptr, nullptr, reinterpret_cast<IDXGISwapChain1**>(swapChain.GetAddressOf()));
     assert(SUCCEEDED(hr));
+    // Alt+EnterはWinApp側でボーダーレスフルスクリーンとして処理するので、DXGIの排他フルスクリーン切り替えは無効にする
+    dxgiFactory->MakeWindowAssociation(winApp->GetHwnd(), DXGI_MWA_NO_ALT_ENTER);
 
     // ヒープ作成
     rtvDescriptorHeap = CreateDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, kMaxRtvCount, false);

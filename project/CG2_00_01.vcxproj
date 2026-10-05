@@ -211,6 +211,11 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="Engine\3d\SkinnedObject3d.cpp" />
     <ClCompile Include="Engine\base\JsonParser.cpp" />
     <ClCompile Include="Engine\base\Framework.cpp" />
+    <ClCompile Include="Engine\2d\Text.cpp" />
+    <ClCompile Include="Engine\math\Collision.cpp" />
+    <ClCompile Include="Engine\base\SaveData.cpp" />
+    <ClCompile Include="Engine\base\JsonWriter.cpp" />
+    <ClCompile Include="Engine\base\GameTime.cpp" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Resources\shaders\Object3d.VS.hlsl">
@@ -295,6 +300,13 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="Engine\base\JsonValue.h" />
     <ClInclude Include="Engine\base\JsonParser.h" />
     <ClInclude Include="Engine\base\Framework.h" />
+    <ClInclude Include="Engine\2d\Text.h" />
+    <ClInclude Include="Engine\base\Timer.h" />
+    <ClInclude Include="Engine\math\Easing.h" />
+    <ClInclude Include="Engine\math\Collision.h" />
+    <ClInclude Include="Engine\base\SaveData.h" />
+    <ClInclude Include="Engine\base\JsonWriter.h" />
+    <ClInclude Include="Engine\base\GameTime.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="externals\imgui\LICENSE.txt" />

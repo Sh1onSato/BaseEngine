@@ -23,4 +23,5 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// COM終了
 	CoUninitialize();
 
+	return 0;
 }
