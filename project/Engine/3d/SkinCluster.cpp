@@ -13,9 +13,7 @@ void SkinCluster::Initialize(DirectXCommon* dxCommon, const std::vector<Matrix4x
 
     HRESULT hr = paletteResource->Map(0, nullptr, reinterpret_cast<void**>(&paletteData));
     if (FAILED(hr)) {
-        Log("SkinCluster: paletteResource Map failed.\n");
-        assert(false);
-        return;
+        CheckHResult(hr, "SkinCluster: Map paletteResource");
     }
 
     // Update()が呼ばれるまでの間、暴れた変形にならないよう単位行列で初期化しておく

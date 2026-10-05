@@ -3,6 +3,7 @@
 #include "Logger.h"
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
 #include <format>
 
 AudioManager* AudioManager::instance = nullptr;
@@ -29,7 +30,7 @@ void AudioManager::Initialize() {
     AudioCommon::GetInstance()->GetMasteringVoice()->GetVoiceDetails(&masterDetails);
     for (size_t i = 0; i < static_cast<size_t>(AudioCategory::kCount); ++i) {
         HRESULT hr = xAudio2->CreateSubmixVoice(&categoryVoices[i], masterDetails.InputChannels, masterDetails.InputSampleRate);
-        assert(SUCCEEDED(hr));
+        Logger::CheckHResult(hr, std::format("AudioManager: CreateSubmixVoice(category {})", i));
         categoryVoices[i]->SetVolume(categoryVolumes[i]);
     }
     AudioCommon::GetInstance()->GetMasteringVoice()->SetVolume(masterVolume);
@@ -156,8 +157,9 @@ SoundHandle AudioManager::Play(const std::string& name, bool loop, float volume,
 
     IXAudio2SourceVoice* sourceVoice = nullptr;
     HRESULT hr = xAudio2->CreateSourceVoice(&sourceVoice, &soundData.wfex, 0, XAUDIO2_DEFAULT_FREQ_RATIO, nullptr, &sends);
-    assert(SUCCEEDED(hr));
     if (FAILED(hr)) {
+        // 再生できなくてもゲームは続行させる（無音になるだけ）
+        Logger::Log(std::format("AudioManager: CreateSourceVoice failed. HRESULT=0x{:08X}\n", static_cast<uint32_t>(hr)));
         return kInvalidSoundHandle;
     }
 

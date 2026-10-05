@@ -30,7 +30,7 @@ void TextureManager::CreateInternalWhiteTexture() {
 	// 1x1ピクセルの白色データを作成
 	DirectX::ScratchImage image{};
 	HRESULT hr = image.Initialize2D(DXGI_FORMAT_R8G8B8A8_UNORM, 1, 1, 1, 1);
-	assert(SUCCEEDED(hr));
+	Logger::CheckHResult(hr, "TextureManager: Initialize2D(white)");
 
 	// 白色を書き込む
 	uint8_t* pixels = image.GetPixels();
@@ -55,14 +55,7 @@ void TextureManager::CreateInternalWhiteTexture() {
 	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource = dxCommon->UploadTextureData(textureData.resource.Get(), image, dxCommon);
 
 	// コマンド実行と待機
-	hr = dxCommon->GetCommandList()->Close();
-	assert(SUCCEEDED(hr));
-	ID3D12CommandList* commandLists[] = { dxCommon->GetCommandList() };
-	dxCommon->GetCommandQueue()->ExecuteCommandLists(1, commandLists);
-	dxCommon->WaitForGpu();
-
-	hr = dxCommon->GetCommandAllocator()->Reset(); assert(SUCCEEDED(hr));
-	hr = dxCommon->GetCommandList()->Reset(dxCommon->GetCommandAllocator(), nullptr); assert(SUCCEEDED(hr));
+	ExecuteUploadAndWait();
 }
 
 void TextureManager::CreateInternalDigitFontTexture() {
@@ -86,7 +79,7 @@ void TextureManager::CreateInternalDigitFontTexture() {
 
 	DirectX::ScratchImage image{};
 	HRESULT hr = image.Initialize2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 1, 1);
-	assert(SUCCEEDED(hr));
+	Logger::CheckHResult(hr, "TextureManager: Initialize2D(digit font)");
 
 	uint8_t* pixels = image.GetPixels();
 	std::memset(pixels, 0, static_cast<size_t>(width) * height * 4); // 全体を透明で初期化
@@ -123,14 +116,7 @@ void TextureManager::CreateInternalDigitFontTexture() {
 	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource = dxCommon->UploadTextureData(textureData.resource.Get(), image, dxCommon);
 
 	// コマンド実行と待機
-	hr = dxCommon->GetCommandList()->Close();
-	assert(SUCCEEDED(hr));
-	ID3D12CommandList* commandLists[] = { dxCommon->GetCommandList() };
-	dxCommon->GetCommandQueue()->ExecuteCommandLists(1, commandLists);
-	dxCommon->WaitForGpu();
-
-	hr = dxCommon->GetCommandAllocator()->Reset(); assert(SUCCEEDED(hr));
-	hr = dxCommon->GetCommandList()->Reset(dxCommon->GetCommandAllocator(), nullptr); assert(SUCCEEDED(hr));
+	ExecuteUploadAndWait();
 }
 
 void TextureManager::LoadTexture(const std::string& filePath){
@@ -158,7 +144,7 @@ void TextureManager::LoadTexture(const std::string& filePath){
 	} else {
 		hr = DirectX::LoadFromWICFile(filePathW.c_str(), DirectX::WIC_FLAGS_FORCE_SRGB, nullptr, image);
 	}
-	assert(SUCCEEDED(hr));
+	Logger::CheckHResult(hr, "TextureManager: Load texture file(" + filePath + ")");
 
 	// ミニマップの作成（DDSの場合は既に含まれていることが多いのでチェック）
 	DirectX::ScratchImage mipChain{};
@@ -166,7 +152,7 @@ void TextureManager::LoadTexture(const std::string& filePath){
 		mipChain = std::move(image);
 	} else {
 		hr = DirectX::GenerateMipMaps(image.GetImages(), image.GetImageCount(), image.GetMetadata(), DirectX::TEX_FILTER_SRGB, 0, mipChain);
-		assert(SUCCEEDED(hr));
+		Logger::CheckHResult(hr, "TextureManager: GenerateMipMaps(" + filePath + ")");
 	}
 
 	// テクスチャデータを追加
@@ -190,16 +176,8 @@ void TextureManager::LoadTexture(const std::string& filePath){
 	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource = dxCommon->UploadTextureData(textureData.resource.Get(),mipChain,dxCommon);
 
 
-	// コマンドリストを閉じて実行、アップロード完了を待機
-	hr = dxCommon->GetCommandList()->Close();
-	assert(SUCCEEDED(hr));
-	ID3D12CommandList* commandListsForUpload[] = { dxCommon->GetCommandList() };
-	dxCommon->GetCommandQueue()->ExecuteCommandLists(1, commandListsForUpload);
-	dxCommon->WaitForGpu();
-
-	// コマンドリストとアロケーターをリセットして、メインループで再度使用できるようにする
-	hr = dxCommon->GetCommandAllocator()->Reset(); assert(SUCCEEDED(hr));
-	hr = dxCommon->GetCommandList()->Reset(dxCommon->GetCommandAllocator(), nullptr); assert(SUCCEEDED(hr));
+	// コマンドリストを閉じて実行、アップロード完了を待機。リセットしてメインループで再度使用できるようにする
+	ExecuteUploadAndWait();
 
 }
 
@@ -208,7 +186,7 @@ uint32_t TextureManager::CreateOrUpdateTexture(const std::string& name, uint32_t
 
 	DirectX::ScratchImage image{};
 	HRESULT hr = image.Initialize2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 1, 1);
-	assert(SUCCEEDED(hr));
+	Logger::CheckHResult(hr, "TextureManager: Initialize2D(" + name + ")");
 	std::memcpy(image.GetPixels(), rgbaPixels, static_cast<size_t>(width) * height * 4);
 
 	auto it = std::find_if(textureDatas.begin(), textureDatas.end(), [&](TextureData& d) { return d.filePath == name; });
@@ -252,13 +230,15 @@ bool TextureManager::HasTexture(const std::string& filePath) const {
 
 void TextureManager::ExecuteUploadAndWait() {
 	HRESULT hr = dxCommon->GetCommandList()->Close();
-	assert(SUCCEEDED(hr));
+	Logger::CheckHResult(hr, "TextureManager: CommandList Close");
 	ID3D12CommandList* commandLists[] = { dxCommon->GetCommandList() };
 	dxCommon->GetCommandQueue()->ExecuteCommandLists(1, commandLists);
 	dxCommon->WaitForGpu();
 
-	hr = dxCommon->GetCommandAllocator()->Reset(); assert(SUCCEEDED(hr));
-	hr = dxCommon->GetCommandList()->Reset(dxCommon->GetCommandAllocator(), nullptr); assert(SUCCEEDED(hr));
+	hr = dxCommon->GetCommandAllocator()->Reset();
+	Logger::CheckHResult(hr, "TextureManager: CommandAllocator Reset");
+	hr = dxCommon->GetCommandList()->Reset(dxCommon->GetCommandAllocator(), nullptr);
+	Logger::CheckHResult(hr, "TextureManager: CommandList Reset");
 }
 
 uint32_t TextureManager::GetTextureIndexByFilePath(const std::string& filePath){
@@ -273,8 +253,8 @@ uint32_t TextureManager::GetTextureIndexByFilePath(const std::string& filePath){
 		uint32_t textureIndex = static_cast<uint32_t>(std::distance(textureDatas.begin(), it));
 		return textureIndex;
 	}
-	assert(0);
-	return 0;
+	// 見つからない＝LoadTexture忘れ。Releaseで黙って0番を返すと別の画像が出て原因が分かりにくいので止める
+	Logger::Fatal("TextureManager: texture not loaded (" + filePath + "). Call LoadTexture first");
 }
 
 uint32_t TextureManager::GetSrvIndex(uint32_t textureIndex) const {
@@ -313,7 +293,7 @@ Microsoft::WRL::ComPtr<ID3D12Resource> TextureManager::CreateTextureResource(ID3
 	// Resourceの生成
 	Microsoft::WRL::ComPtr <ID3D12Resource> resource = nullptr;
 	HRESULT hr = device->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAG_NONE, &resourceDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&resource));
-	assert(SUCCEEDED(hr));
+	Logger::CheckHResult(hr, "TextureManager: CreateCommittedResource(texture)");
 	return resource;
 }
 

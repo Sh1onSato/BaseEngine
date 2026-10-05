@@ -11,11 +11,11 @@ void Object3dCommon::Initialize(DirectXCommon* dxCommon, SrvManager* srvManager)
 	this->dxCommon = dxCommon;
 	this->srvManager = srvManager;
     HRESULT hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxcUtils));
-    assert(SUCCEEDED(hr));
+    CheckHResult(hr, "Object3dCommon: DxcCreateInstance(DxcUtils)");
     hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxcCompiler));
-    assert(SUCCEEDED(hr));
+    CheckHResult(hr, "Object3dCommon: DxcCreateInstance(DxcCompiler)");
     hr = dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
-    assert(SUCCEEDED(hr));
+    CheckHResult(hr, "Object3dCommon: CreateDefaultIncludeHandler");
 	// 1. ルートシグネチャの作成
 	CreateRootSignature();
 	// 2. パイプラインの作成
@@ -23,7 +23,7 @@ void Object3dCommon::Initialize(DirectXCommon* dxCommon, SrvManager* srvManager)
 
     // DirectionalLight用のリソース
     directionalLightResource = dxCommon->CreatBufferResource(sizeof(DirectionalLight));
-    directionalLightResource->Map(0, nullptr, reinterpret_cast<void**>(&directionalLightData));
+    CheckHResult(directionalLightResource->Map(0, nullptr, reinterpret_cast<void**>(&directionalLightData)), "Object3dCommon: Map directionalLightResource");
 
     directionalLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
     directionalLightData->direction = Calculation::Normalize(Vector3{ -0.5f, -1.0f, 0.3f }); // 斜め上からの太陽光
@@ -31,7 +31,7 @@ void Object3dCommon::Initialize(DirectXCommon* dxCommon, SrvManager* srvManager)
 
     // PointLight用のリソース（デフォルトでは無効。呼び出し側(GetPointLightData()経由)で位置・intensityを設定して有効化する想定）
     pointLightResource = dxCommon->CreatBufferResource(sizeof(PointLight));
-    pointLightResource->Map(0, nullptr, reinterpret_cast<void**>(&pointLightData));
+    CheckHResult(pointLightResource->Map(0, nullptr, reinterpret_cast<void**>(&pointLightData)), "Object3dCommon: Map pointLightResource");
     pointLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
     pointLightData->position = { 0.0f, 0.0f, 0.0f };
     pointLightData->intensity = 0.0f; // デフォルトは無効(0)。シーン側で用途に応じて設定する
@@ -40,7 +40,7 @@ void Object3dCommon::Initialize(DirectXCommon* dxCommon, SrvManager* srvManager)
 
     // SpotLight用のリソース（デフォルトでは無効。呼び出し側(GetSpotLightData()経由)で位置・向き・intensityを設定して有効化する想定）
     spotLightResource = dxCommon->CreatBufferResource(sizeof(SpotLight));
-    spotLightResource->Map(0, nullptr, reinterpret_cast<void**>(&spotLightData));
+    CheckHResult(spotLightResource->Map(0, nullptr, reinterpret_cast<void**>(&spotLightData)), "Object3dCommon: Map spotLightResource");
     spotLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
     spotLightData->position = { 0.0f, 0.0f, 0.0f };
     spotLightData->intensity = 0.0f; // デフォルトは無効(0)。シーン側で用途に応じて設定する
@@ -66,7 +66,7 @@ void Object3dCommon::Initialize(DirectXCommon* dxCommon, SrvManager* srvManager)
 
     // ShadowData用のリソース
     shadowDataResource = dxCommon->CreatBufferResource(sizeof(ShadowData));
-    shadowDataResource->Map(0, nullptr, reinterpret_cast<void**>(&shadowData));
+    CheckHResult(shadowDataResource->Map(0, nullptr, reinterpret_cast<void**>(&shadowData)), "Object3dCommon: Map shadowDataResource");
     shadowData->lightViewProjection = Calculation::MakeIdentity4x4();
     shadowData->bias = 0.0025f;
     shadowData->orthoExtentWorld = shadowOrthoExtent;
@@ -84,7 +84,7 @@ void Object3dCommon::Initialize(DirectXCommon* dxCommon, SrvManager* srvManager)
     HRESULT hrPalette = defaultBonePaletteResource->Map(0, nullptr, reinterpret_cast<void**>(&defaultBonePaletteData));
     if (FAILED(hrPalette)) {
         Log("Object3dCommon: defaultBonePaletteResource Map failed.\n");
-        assert(false);
+        CheckHResult(hrPalette, "Object3dCommon: Map defaultBonePaletteResource");
     }
     *defaultBonePaletteData = Calculation::MakeIdentity4x4();
     defaultBonePaletteResource->Unmap(0, nullptr);
@@ -188,14 +188,16 @@ void Object3dCommon::CreateRootSignature() {
     Microsoft::WRL::ComPtr<ID3DBlob> errorBlob = nullptr;
     HRESULT hr = D3D12SerializeRootSignature(&descriptionRootSignature, D3D_ROOT_SIGNATURE_VERSION_1, &signatureBlob, &errorBlob);
     if (FAILED(hr)) {
-        Log(reinterpret_cast<char*>(errorBlob->GetBufferPointer()));
-        assert(false);
+        if (errorBlob) {
+            Log(reinterpret_cast<char*>(errorBlob->GetBufferPointer()));
+        }
+        CheckHResult(hr, "Object3dCommon: D3D12SerializeRootSignature(main)");
     }
 
     hr = dxCommon->GetDevice()->CreateRootSignature(0, signatureBlob->GetBufferPointer(), signatureBlob->GetBufferSize(), IID_PPV_ARGS(&rootSignature));
     if (FAILED(hr)) {
         Log("Object3dCommon: CreateRootSignature (main) failed.\n");
-        assert(false);
+        CheckHResult(hr, "Object3dCommon: CreateRootSignature(main)");
     }
     Log(std::format("Object3dCommon: main root signature created. NumParameters={}\n", descriptionRootSignature.NumParameters));
 }
@@ -258,7 +260,7 @@ void Object3dCommon::CreateGraphicsPipeline() {
 
     // --- 3. パイプラインステート生成 (有効化) ---
     HRESULT hr = dxCommon->GetDevice()->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&pipelineState));
-    assert(SUCCEEDED(hr));
+    CheckHResult(hr, "Object3dCommon: CreateGraphicsPipelineState(main)");
 
     // --- 4. 加算合成用パイプラインステート生成（発光表現用） ---
     // ParticleCommonの加算ブレンド設定と同じ式（Src*alpha + Dest*1）を使う
@@ -273,7 +275,7 @@ void Object3dCommon::CreateGraphicsPipeline() {
     psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
 
     hr = dxCommon->GetDevice()->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&pipelineStateAdditive));
-    assert(SUCCEEDED(hr));
+    CheckHResult(hr, "Object3dCommon: CreateGraphicsPipelineState(additive)");
 }
 
 void Object3dCommon::CreateShadowRootSignature() {
@@ -296,14 +298,16 @@ void Object3dCommon::CreateShadowRootSignature() {
     Microsoft::WRL::ComPtr<ID3DBlob> errorBlob = nullptr;
     HRESULT hr = D3D12SerializeRootSignature(&descriptionRootSignature, D3D_ROOT_SIGNATURE_VERSION_1, &signatureBlob, &errorBlob);
     if (FAILED(hr)) {
-        Log(reinterpret_cast<char*>(errorBlob->GetBufferPointer()));
-        assert(false);
+        if (errorBlob) {
+            Log(reinterpret_cast<char*>(errorBlob->GetBufferPointer()));
+        }
+        CheckHResult(hr, "Object3dCommon: D3D12SerializeRootSignature(shadow)");
     }
 
     hr = dxCommon->GetDevice()->CreateRootSignature(0, signatureBlob->GetBufferPointer(), signatureBlob->GetBufferSize(), IID_PPV_ARGS(&rootSignatureShadow));
     if (FAILED(hr)) {
         Log("Object3dCommon: CreateRootSignature (shadow) failed.\n");
-        assert(false);
+        CheckHResult(hr, "Object3dCommon: CreateRootSignature(shadow)");
     }
 }
 
@@ -347,7 +351,7 @@ void Object3dCommon::CreateShadowPipeline() {
     psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 
     HRESULT hr = dxCommon->GetDevice()->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&pipelineStateShadow));
-    assert(SUCCEEDED(hr));
+    CheckHResult(hr, "Object3dCommon: CreateGraphicsPipelineState(shadow)");
 }
 
 void Object3dCommon::PreDraw(Object3dBlendMode blendMode) {

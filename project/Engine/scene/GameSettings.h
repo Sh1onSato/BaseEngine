@@ -2,7 +2,7 @@
 #include "SaveData.h"
 #include <string>
 
-// シーンをまたいで保持し、ファイル（%LOCALAPPDATA%\<exe名>\settings.json）にも保存するゲーム設定。
+// シーンをまたいで保持し、ファイル（SaveData::GetSaveDirectory() の settings.json）にも保存するゲーム設定。
 // 音量はセット時にAudioManagerへ即反映する。
 // ジャンル固有の設定値は GetSaveData() 経由で任意のキーとして読み書きできる（項目を増やすたびにこのクラスを変えなくてよい）。
 class GameSettings {
@@ -25,6 +25,10 @@ public:
 	// --- 画面 ---（実際の切り替えはWinApp::SetFullscreen。Frameworkが起動時/終了時に同期する）
 	bool GetFullscreen() const { return fullscreen; }
 	void SetFullscreen(bool value) { fullscreen = value; }
+	// ウィンドウモード時のクライアントサイズ（実際の変更はWinApp::SetClientSize。Frameworkが起動時/終了時に同期する）
+	int GetWindowWidth() const { return windowWidth; }
+	int GetWindowHeight() const { return windowHeight; }
+	void SetWindowSize(int width, int height);
 
 	// --- 視点操作（FPS/TPS向け） ---
 	float GetMouseSensitivity() const { return mouseSensitivity; }
@@ -60,6 +64,11 @@ private:
 	float seVolume = 1.0f;
 
 	bool fullscreen = false;
+	int windowWidth = 1280;
+	int windowHeight = 720;
+	// 壊れた値が保存されていてもウィンドウが消えないようにする下限
+	static constexpr int kMinWindowWidth = 320;
+	static constexpr int kMinWindowHeight = 180;
 
 	float mouseSensitivity = 0.002f;
 	float eyeHeight = 1.5f;

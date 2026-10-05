@@ -1,4 +1,5 @@
 #include "ImGuiManager.h"
+#include "Logger.h"
 #include "externals/imgui/imgui.h"
 #include "externals/imgui/imgui_impl_dx12.h"
 #include "externals/imgui/imgui_impl_win32.h"
@@ -24,7 +25,7 @@ void ImGuiManager::Initialize(WinApp* winApp, DirectXCommon* dxCommon, SrvManage
     (void)io;
 
     if (!ImGui_ImplWin32_Init(winApp->GetHwnd())) {
-        assert(false && "ImGui_ImplWin32_Init failed");
+        Logger::Fatal("ImGuiManager: ImGui_ImplWin32_Init failed");
     }
 
     ImGui_ImplDX12_InitInfo init_info = {};
@@ -48,7 +49,7 @@ void ImGuiManager::Initialize(WinApp* winApp, DirectXCommon* dxCommon, SrvManage
     init_info.UserData = srvManager;
 
     if (!ImGui_ImplDX12_Init(&init_info)) {
-        assert(false && "ImGui_ImplDX12_Init failed");
+        Logger::Fatal("ImGuiManager: ImGui_ImplDX12_Init failed");
     }
 }
 

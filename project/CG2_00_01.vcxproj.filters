@@ -150,6 +150,9 @@
     <ClCompile Include="Engine\base\GameTime.cpp">
       <Filter>ソース ファイル\engine\base</Filter>
     </ClCompile>
+    <ClCompile Include="Engine\base\Screen.cpp">
+      <Filter>ソース ファイル\engine\base</Filter>
+    </ClCompile>
     <ClCompile Include="Engine\base\JsonWriter.cpp">
       <Filter>ソース ファイル\engine\base</Filter>
     </ClCompile>
@@ -208,6 +211,9 @@
       <Filter>ソース ファイル\engine\scene</Filter>
     </ClCompile>
     <ClCompile Include="Engine\scene\SkinningTestScene.cpp">
+      <Filter>ソース ファイル\engine\scene</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\scene\EngineTestScene.cpp">
       <Filter>ソース ファイル\engine\scene</Filter>
     </ClCompile>
     <ClCompile Include="Engine\3d\CameraManager.cpp">
@@ -361,6 +367,9 @@
     <ClInclude Include="Engine\base\GameTime.h">
       <Filter>ヘッダー ファイル\engine\base</Filter>
     </ClInclude>
+    <ClInclude Include="Engine\base\Screen.h">
+      <Filter>ヘッダー ファイル\engine\base</Filter>
+    </ClInclude>
     <ClInclude Include="Engine\base\JsonWriter.h">
       <Filter>ヘッダー ファイル\engine\base</Filter>
     </ClInclude>
@@ -416,6 +425,9 @@
       <Filter>ヘッダー ファイル\engine\scene</Filter>
     </ClInclude>
     <ClInclude Include="Engine\scene\SkinningTestScene.h">
+      <Filter>ヘッダー ファイル\engine\scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\scene\EngineTestScene.h">
       <Filter>ヘッダー ファイル\engine\scene</Filter>
     </ClInclude>
     <ClInclude Include="Engine\3d\CameraManager.h">

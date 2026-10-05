@@ -64,9 +64,13 @@ private:
     static constexpr uint32_t kFullBlurHRtvIndex = 6;
     static constexpr uint32_t kFullBlurVRtvIndex = 7;
 
-    // ブルーム処理は負荷軽減のため半解像度で行う
-    static constexpr uint32_t kBloomWidth = WinApp::KclientWidth / 2;
-    static constexpr uint32_t kBloomHeight = WinApp::KclientHeight / 2;
+    // オフスクリーンのフル解像度（Initialize時点のバックバッファサイズ）。
+    // ※ウィンドウのリサイズにはまだ追従しない（作り直しは未対応）
+    uint32_t fullWidth = 0;
+    uint32_t fullHeight = 0;
+    // ブルーム処理は負荷軽減のため半解像度で行う（Initializeでフル解像度の半分に決める）
+    uint32_t bloomWidth = 0;
+    uint32_t bloomHeight = 0;
 
     void CreateGraphicsPipeline();
     void CreateExtractPipeline();

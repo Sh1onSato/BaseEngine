@@ -50,6 +50,10 @@ public:
 
     void WaitForGpu();
 	void CreateSwapChainRTV();
+    // メインの深度バッファとDSVを作成（リサイズ時は作り直す）
+    void CreateDepthBuffer(uint32_t width, uint32_t height);
+    // バックバッファと深度バッファを新しいサイズで作り直す（Framework::Update()の先頭から呼ぶ）
+    void Resize(uint32_t width, uint32_t height);
 
     // --- ゲッター ----
     // --- デバイス・コマンド系 ---
@@ -98,8 +102,12 @@ public:
     ID3D12Resource* GetDepthStencilResource() const { return depthStencilResource.Get(); }
 
     // --- ビューポート・シザー矩形 ---
-const D3D12_VIEWPORT& GetViewport() const { return viewport; }
-const D3D12_RECT& GetScissorRect() const { return scissorRect; }
+    // バックバッファ内でゲームの絵を描く範囲（Screenのレイアウトを毎フレームPreDrawで取り込んだもの）
+    const D3D12_VIEWPORT& GetViewport() const { return viewport; }
+    const D3D12_RECT& GetScissorRect() const { return scissorRect; }
+    // 現在のバックバッファのサイズ
+    uint32_t GetBackBufferWidth() const { return backBufferWidth; }
+    uint32_t GetBackBufferHeight() const { return backBufferHeight; }
 
     // --- 暫定保持用 ---
     ID3D12RootSignature* GetRootSignature() const { return rootSignature.Get(); }
@@ -119,6 +127,10 @@ const D3D12_RECT& GetScissorRect() const { return scissorRect; }
 
     // 画面クリアカラー（背景色）。PostProcessのオフスクリーンRTVクリアもこの値を共用する
     static constexpr float kClearColor[4] = { 0.1f, 0.25f, 0.5f, 1.0f };
+    // レターボックスの余白（黒帯）の色
+    static constexpr float kLetterboxColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    // スワップチェーンのバッファ数
+    static constexpr uint32_t kSwapChainBufferCount = 2;
 private:
     // --- 基盤系 ---
     WinApp* winApp = nullptr;
@@ -133,7 +145,9 @@ private:
 
     // --- 表示・リソース系 ---
     Microsoft::WRL::ComPtr<IDXGISwapChain4> swapChain;
-    Microsoft::WRL::ComPtr<ID3D12Resource> swapChainResources[2];
+    Microsoft::WRL::ComPtr<ID3D12Resource> swapChainResources[kSwapChainBufferCount];
+    uint32_t backBufferWidth = 0;
+    uint32_t backBufferHeight = 0;
     Microsoft::WRL::ComPtr<ID3D12Resource> depthStencilResource;
 
     // --- ディスクリプタヒープ ---

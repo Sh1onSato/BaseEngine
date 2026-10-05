@@ -95,6 +95,40 @@ LRESULT CALLBACK WinApp::WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
 			return 0;
 		}
 		break;
+	case WM_ENTERSIZEMOVE:
+		// 枠のドラッグ開始。ここから先はWindowsのモーダルループになりメインループが止まるので、
+		// タイマーで1フレームずつ進める（USER_TIMER_MINIMUMでもPresentの垂直同期待ちでフレームレートは保たれる）
+		if (instance) {
+			instance->isInSizeMove = true;
+			SetTimer(hwnd, kModalTickTimerId, USER_TIMER_MINIMUM, nullptr);
+		}
+		break;
+	case WM_EXITSIZEMOVE:
+		if (instance) {
+			KillTimer(hwnd, kModalTickTimerId);
+			instance->isInSizeMove = false;
+		}
+		break;
+	case WM_TIMER:
+		if (wParam == kModalTickTimerId && instance && instance->modalTickCallback) {
+			instance->modalTickCallback();
+			return 0;
+		}
+		break;
+	case WM_SIZE:
+		// ここではサイズを覚えるだけ。バックバッファの作り直しはFramework::Update()の先頭で行う
+		// （ドラッグ中は大量に来るので、1フレームに1回にまとめる）。最小化中は0x0になるので無視する
+		if (instance && wParam != SIZE_MINIMIZED && LOWORD(lParam) > 0 && HIWORD(lParam) > 0) {
+			instance->pendingWidth = LOWORD(lParam);
+			instance->pendingHeight = HIWORD(lParam);
+			instance->hasPendingResize = true;
+			// ウィンドウモードでのサイズを覚えておく（終了時はウィンドウが破棄済みで問い合わせできないため）
+			if (!instance->isFullscreen && wParam != SIZE_MAXIMIZED) {
+				instance->windowedClientWidth = LOWORD(lParam);
+				instance->windowedClientHeight = HIWORD(lParam);
+			}
+		}
+		break;
 	}
 	// 標準のメッセージ処理を行う
 	return DefWindowProc(hwnd, msg, wParam, lParam);
@@ -136,6 +170,50 @@ void WinApp::SetClipCursor(bool isClip) {
 	}
 }
 
+bool WinApp::ConsumeResize(uint32_t& width, uint32_t& height) {
+	if (!hasPendingResize) {
+		return false;
+	}
+	width = pendingWidth;
+	height = pendingHeight;
+	hasPendingResize = false;
+	return true;
+}
+
+void WinApp::GetClientSize(uint32_t& width, uint32_t& height) const {
+	RECT rect{};
+	GetClientRect(hwnd, &rect);
+	width = static_cast<uint32_t>(rect.right - rect.left);
+	height = static_cast<uint32_t>(rect.bottom - rect.top);
+}
+
+void WinApp::SetClientSize(uint32_t width, uint32_t height) {
+	if (width == 0 || height == 0) {
+		return;
+	}
+	// クライアント領域がこのサイズになるよう、枠込みのウィンドウサイズを求める
+	RECT rect = { 0, 0, static_cast<LONG>(width), static_cast<LONG>(height) };
+	AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, false);
+	LONG outerWidth = rect.right - rect.left;
+	LONG outerHeight = rect.bottom - rect.top;
+
+	if (isFullscreen) {
+		// 今は画面いっぱいなので、ウィンドウモードに戻したときのサイズだけ変えておく
+		windowedRect.right = windowedRect.left + outerWidth;
+		windowedRect.bottom = windowedRect.top + outerHeight;
+		windowedClientWidth = width;
+		windowedClientHeight = height;
+		return;
+	}
+	// サイズ変更はWM_SIZE経由でバックバッファに反映される
+	SetWindowPos(hwnd, nullptr, 0, 0, outerWidth, outerHeight, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+void WinApp::GetWindowedClientSize(uint32_t& width, uint32_t& height) const {
+	width = windowedClientWidth;
+	height = windowedClientHeight;
+}
+
 void WinApp::SetTitle(const std::wstring& title) {
 	SetWindowTextW(hwnd, title.c_str());
 }
@@ -144,6 +222,9 @@ void WinApp::SetFullscreen(bool fullscreen) {
 	if (fullscreen == isFullscreen) {
 		return;
 	}
+
+	// SetWindowPos中に届くWM_SIZEで、フルスクリーンのサイズをウィンドウモードのサイズとして覚えないよう先に切り替える
+	isFullscreen = fullscreen;
 
 	if (fullscreen) {
 		// 戻すときのために今のウィンドウ位置を覚えておく
@@ -163,5 +244,4 @@ void WinApp::SetFullscreen(bool fullscreen) {
 			windowedRect.right - windowedRect.left, windowedRect.bottom - windowedRect.top,
 			SWP_FRAMECHANGED | SWP_NOOWNERZORDER);
 	}
-	isFullscreen = fullscreen;
 }

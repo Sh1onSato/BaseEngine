@@ -1,4 +1,5 @@
 #include "Camera.h"
+#include "Screen.h"
 #include "externals/imgui/imgui.h"
 
 Camera::Camera() {
@@ -12,8 +13,8 @@ void Camera::Update() {
     Matrix4x4 cameraMatrix = Calculation::MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
     // ビュー行列はカメラ行列の逆行列
     viewMatrix = Calculation::Inverse(cameraMatrix);
-    // プロジェクション行列の作成
-    projectionMatrix = Calculation::MakePerspectiveFovMatrix(fovY, aspectRatio, nearZ, farZ);
+    // プロジェクション行列の作成（アスペクト比はゲーム座標に合わせる。kExpandでウィンドウ比率が変わっても歪まない）
+    projectionMatrix = Calculation::MakePerspectiveFovMatrix(fovY, Screen::GetAspectRatio(), nearZ, farZ);
     // ビュープロジェクション行列の計算
     viewProjectionMatrix = viewMatrix * projectionMatrix;
 }

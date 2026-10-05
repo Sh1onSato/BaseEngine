@@ -2,7 +2,7 @@
 #include "Sprite.h"
 #include "SpriteCommon.h"
 #include "GameTime.h"
-#include "WinApp.h"
+#include "Screen.h"
 #include <algorithm>
 
 SceneManager::SceneManager() = default;
@@ -14,7 +14,7 @@ void SceneManager::Initialize(SpriteCommon* common) {
     fadeSprite = std::make_unique<Sprite>();
     fadeSprite->Initialize(spriteCommon, "white");
     fadeSprite->SetPosition({ 0.0f, 0.0f });
-    fadeSprite->SetSize({ static_cast<float>(WinApp::KclientWidth), static_cast<float>(WinApp::KclientHeight) });
+    fadeSprite->SetSize(Screen::GetGameSize());
 }
 
 void SceneManager::SwapScene() {
@@ -71,6 +71,9 @@ void SceneManager::Update() {
     }
 
     if (fadeSprite && fadeAlpha > 0.0f) {
+        // ゲーム座標のサイズはウィンドウサイズや表示モードで変わるので、毎回ゲーム画面全体を覆うように合わせる
+        fadeSprite->SetPosition({ 0.0f, 0.0f });
+        fadeSprite->SetSize(Screen::GetGameSize());
         fadeSprite->SetColor({ fadeColor.x, fadeColor.y, fadeColor.z, fadeColor.w * fadeAlpha });
         fadeSprite->Update();
     }

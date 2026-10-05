@@ -1,4 +1,5 @@
 #include "MyGame.h"
+#include "Screen.h"
 
 void MyGame::Initialize() {
 	// 基底クラスの初期化
@@ -8,6 +9,12 @@ void MyGame::Initialize() {
 	sceneFactory = std::make_unique<SceneFactory>();
 	// シーンマネージャにファクトリーをセット
 	sceneManager->SetSceneFactory(sceneFactory.get());
+
+	// 画面の縦横比がベース解像度(WinApp::KclientWidth x KclientHeight)と違うときの表示方法
+	//   kLetterbox: ゲーム座標はベース解像度のまま、余りは黒帯（2D・STG・パズル等、見える範囲を揃えたいゲーム向け）
+	//   kExpand   : 画面いっぱいに描き、ゲーム座標の幅(または高さ)を広げる（3Dアクション・FPS等向け。
+	//               端に置くUIは Screen::GetAnchoredPosition() で置くこと）
+	Screen::SetScaleMode(Screen::ScaleMode::kLetterbox);
 
 	// 最初のアクティブシーンを設定
 	// ※スキニング検証(SkinningTestScene)を試す場合は、ここを一時的に"SKINNING_TEST"に変更してください（恒久変更はしないこと）

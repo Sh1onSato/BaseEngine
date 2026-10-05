@@ -28,7 +28,6 @@ private:
     Matrix4x4 viewProjectionMatrix;
 
     float fovY = 1.0471975f; // 60度（汎用的な既定値。狭すぎる/広すぎる場合は呼び出し側で調整）
-    float aspectRatio = static_cast<float>(WinApp::KclientWidth) / static_cast<float>(WinApp::KclientHeight);
     float nearZ = 0.1f;
     float farZ = 1000.0f; // Skyboxの既定スケール(500、Skybox.cpp参照)より外側に余裕を持たせた値
 };

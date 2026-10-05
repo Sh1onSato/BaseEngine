@@ -1,5 +1,6 @@
 #include "ParticleCommon.h"
 #include "ShaderCompiler.h"
+#include "Logger.h"
 #include <cassert>
 
 using namespace ShaderCompiler;
@@ -10,11 +11,11 @@ void ParticleCommon::Initialize(DirectXCommon* dxCommon, SrvManager* srvManager)
 
     // DXCの初期化 (Object3dCommon等と同じ手順)
     HRESULT hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxcUtils));
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "ParticleCommon: DxcCreateInstance(DxcUtils)");
     hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxcCompiler));
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "ParticleCommon: DxcCreateInstance(DxcCompiler)");
     hr = dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "ParticleCommon: CreateDefaultIncludeHandler");
 
     // ルートシグネチャの作成
     CreateRootSignature();
@@ -86,11 +87,12 @@ void ParticleCommon::CreateRootSignature() {
     Microsoft::WRL::ComPtr<ID3DBlob> signatureBlob = nullptr;
     Microsoft::WRL::ComPtr<ID3DBlob> errorBlob = nullptr;
     HRESULT hr = D3D12SerializeRootSignature(&descriptionRootSignature, D3D_ROOT_SIGNATURE_VERSION_1, &signatureBlob, &errorBlob);
-    if (FAILED(hr)) {
-        assert(false);
+    if (FAILED(hr) && errorBlob) {
+        Logger::Log(reinterpret_cast<char*>(errorBlob->GetBufferPointer()));
     }
+    Logger::CheckHResult(hr, "ParticleCommon: D3D12SerializeRootSignature");
     hr = dxCommon->GetDevice()->CreateRootSignature(0, signatureBlob->GetBufferPointer(), signatureBlob->GetBufferSize(), IID_PPV_ARGS(&rootSignature));
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "ParticleCommon: CreateRootSignature");
 }
 
 void ParticleCommon::CreateGraphicsPipeline() {
@@ -148,15 +150,15 @@ void ParticleCommon::CreateGraphicsPipeline() {
     // 1. 点用 PSO の作成
     psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
     HRESULT hr = dxCommon->GetDevice()->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&pipelineStatePoint));
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "ParticleCommon: CreateGraphicsPipelineState(point)");
 
     // 2. 線用 PSO の作成
     psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
     hr = dxCommon->GetDevice()->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&pipelineStateLine));
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "ParticleCommon: CreateGraphicsPipelineState(line)");
 
     // 3. 面用 PSO の作成
     psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
     hr = dxCommon->GetDevice()->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&pipelineStateTriangle));
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "ParticleCommon: CreateGraphicsPipelineState(triangle)");
 }

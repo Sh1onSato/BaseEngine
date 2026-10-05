@@ -1,7 +1,14 @@
 #include "Logger.h"
 #include <strsafe.h>
+#include <d3d12.h>
+#include <cstdint>
+#include <format>
 
 #pragma comment(lib, "dbghelp.lib")
+
+namespace {
+	ID3D12Device* diagnosticsDevice = nullptr;
+}
 
 namespace Logger{
 	void Log(const std::string& message) {
@@ -11,6 +18,36 @@ namespace Logger{
 	void Log(std::ostream& os, const std::string& message) {
 		os << message << std::endl;
 		OutputDebugStringA(message.c_str());
+	}
+
+	void Fatal(const std::string& message) {
+		std::string text = "[Fatal] " + message + "\n";
+		Log(text);
+		// デバッガ接続中はその場で止めて呼び出し履歴を見られるようにする
+		if (IsDebuggerPresent()) {
+			__debugbreak();
+		}
+		MessageBoxA(nullptr, text.c_str(), "Fatal Error", MB_OK | MB_ICONERROR);
+		ExitProcess(1);
+	}
+
+	void CheckHResult(HRESULT hr, const std::string& what) {
+		if (SUCCEEDED(hr)) {
+			return;
+		}
+		std::string message = std::format("{} failed. HRESULT=0x{:08X}", what, static_cast<uint32_t>(hr));
+		// デバイスが失われていれば、その理由も出す
+		if (diagnosticsDevice) {
+			HRESULT reason = diagnosticsDevice->GetDeviceRemovedReason();
+			if (FAILED(reason)) {
+				message += std::format("\nDeviceRemovedReason=0x{:08X}", static_cast<uint32_t>(reason));
+			}
+		}
+		Fatal(message);
+	}
+
+	void SetDiagnosticsDevice(ID3D12Device* device) {
+		diagnosticsDevice = device;
 	}
 
 	LONG WINAPI ExportDump(EXCEPTION_POINTERS* exception) {

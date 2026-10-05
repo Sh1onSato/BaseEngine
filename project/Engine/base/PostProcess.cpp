@@ -1,7 +1,11 @@
 #include "PostProcess.h"
 #include "ShaderCompiler.h"
+#include "Logger.h"
 #include "externals/imgui/imgui.h"
+#include "Screen.h"
+#include <algorithm>
 #include <cassert>
+#include <format>
 
 using namespace ShaderCompiler;
 
@@ -9,10 +13,16 @@ void PostProcess::Initialize(DirectXCommon* dxCommon, SrvManager* srvManager) {
     this->dxCommon = dxCommon;
     this->srvManager = srvManager;
 
+    // オフスクリーンのサイズはバックバッファに合わせる（リサイズ後の作り直しは未対応）
+    fullWidth = Screen::GetBackBufferWidth();
+    fullHeight = Screen::GetBackBufferHeight();
+    bloomWidth = (std::max)(fullWidth / 2, 1u);
+    bloomHeight = (std::max)(fullHeight / 2, 1u);
+
     // 1. テクスチャリソースの設定（フル解像度シーン）
     D3D12_RESOURCE_DESC desc{};
-    desc.Width = WinApp::KclientWidth;
-    desc.Height = WinApp::KclientHeight;
+    desc.Width = fullWidth;
+    desc.Height = fullHeight;
     desc.MipLevels = 1;
     desc.DepthOrArraySize = 1;
     desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
@@ -31,7 +41,7 @@ void PostProcess::Initialize(DirectXCommon* dxCommon, SrvManager* srvManager) {
         &heapProps, D3D12_HEAP_FLAG_NONE, &desc,
         D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, &clearValue, IID_PPV_ARGS(&resource)
     );
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "PostProcess: CreateCommittedResource(scene)");
 
     // 2. RTVの作成
     rtvIndex = kSceneRtvIndex;
@@ -45,26 +55,26 @@ void PostProcess::Initialize(DirectXCommon* dxCommon, SrvManager* srvManager) {
     srvManager->CreateSRVForTexture2D(srvIndex, resource.Get(), desc.Format, 1);
 
     // 4. ブルーム用の半解像度テクスチャ3枚（輝度抽出／水平ブラー／垂直ブラー=最終ブルーム）
-    brightnessResource = CreateBloomTexture(kBloomWidth, kBloomHeight, kBrightnessRtvIndex, brightnessSrvIndex);
-    blurHResource = CreateBloomTexture(kBloomWidth, kBloomHeight, kBlurHRtvIndex, blurHSrvIndex);
-    blurVResource = CreateBloomTexture(kBloomWidth, kBloomHeight, kBlurVRtvIndex, blurVSrvIndex);
+    brightnessResource = CreateBloomTexture(bloomWidth, bloomHeight, kBrightnessRtvIndex, brightnessSrvIndex);
+    blurHResource = CreateBloomTexture(bloomWidth, bloomHeight, kBlurHRtvIndex, blurHSrvIndex);
+    blurVResource = CreateBloomTexture(bloomWidth, bloomHeight, kBlurVRtvIndex, blurVSrvIndex);
 
     // 4.5. 画面全体ぼかし用のフル解像度テクスチャ2枚（水平ブラー／垂直ブラー=最終ぼかし）
-    fullBlurHResource = CreateBloomTexture(WinApp::KclientWidth, WinApp::KclientHeight, kFullBlurHRtvIndex, fullBlurHSrvIndex);
-    fullBlurVResource = CreateBloomTexture(WinApp::KclientWidth, WinApp::KclientHeight, kFullBlurVRtvIndex, fullBlurVSrvIndex);
+    fullBlurHResource = CreateBloomTexture(fullWidth, fullHeight, kFullBlurHRtvIndex, fullBlurHSrvIndex);
+    fullBlurVResource = CreateBloomTexture(fullWidth, fullHeight, kFullBlurVRtvIndex, fullBlurVSrvIndex);
 
     // 半解像度パス共通のビューポート・シザー矩形
     bloomViewport.TopLeftX = 0.0f;
     bloomViewport.TopLeftY = 0.0f;
-    bloomViewport.Width = static_cast<float>(kBloomWidth);
-    bloomViewport.Height = static_cast<float>(kBloomHeight);
+    bloomViewport.Width = static_cast<float>(bloomWidth);
+    bloomViewport.Height = static_cast<float>(bloomHeight);
     bloomViewport.MinDepth = 0.0f;
     bloomViewport.MaxDepth = 1.0f;
 
     bloomScissorRect.left = 0;
     bloomScissorRect.top = 0;
-    bloomScissorRect.right = static_cast<LONG>(kBloomWidth);
-    bloomScissorRect.bottom = static_cast<LONG>(kBloomHeight);
+    bloomScissorRect.right = static_cast<LONG>(bloomWidth);
+    bloomScissorRect.bottom = static_cast<LONG>(bloomHeight);
 
     // 5. パイプライン生成
     CreateGraphicsPipeline();
@@ -78,7 +88,7 @@ void PostProcess::Initialize(DirectXCommon* dxCommon, SrvManager* srvManager) {
     vertexBufferView.StrideInBytes = sizeof(VertexData);
 
     VertexData* vertexData = nullptr;
-    vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&vertexData));
+    Logger::CheckHResult(vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&vertexData)), "PostProcess: Map vertexResource");
     // NDC座標系 (-1.0 ～ 1.0)
     vertexData[0] = { {-1.0f, -1.0f, 0.0f, 1.0f}, {0.0f, 1.0f}, {0.0f, 0.0f, -1.0f} }; // 左下
     vertexData[1] = { {-1.0f,  1.0f, 0.0f, 1.0f}, {0.0f, 0.0f}, {0.0f, 0.0f, -1.0f} }; // 左上
@@ -111,7 +121,7 @@ Microsoft::WRL::ComPtr<ID3D12Resource> PostProcess::CreateBloomTexture(uint32_t 
         &heapProps, D3D12_HEAP_FLAG_NONE, &desc,
         D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, &clearValue, IID_PPV_ARGS(&texture)
     );
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, std::format("PostProcess: CreateCommittedResource(bloom/blur texture {}x{}, rtv {})", width, height, rtvIdx));
 
     D3D12_RENDER_TARGET_VIEW_DESC rtvDesc{};
     rtvDesc.Format = desc.Format;
@@ -189,20 +199,26 @@ void PostProcess::CreateGraphicsPipeline() {
     Microsoft::WRL::ComPtr<ID3DBlob> signatureBlob;
     Microsoft::WRL::ComPtr<ID3DBlob> errorBlob;
     HRESULT hr = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signatureBlob, &errorBlob);
-    assert(SUCCEEDED(hr));
+    if (FAILED(hr) && errorBlob) {
+        Logger::Log(reinterpret_cast<char*>(errorBlob->GetBufferPointer()));
+    }
+    Logger::CheckHResult(hr, "PostProcess: D3D12SerializeRootSignature(composite)");
     hr = device->CreateRootSignature(0, signatureBlob->GetBufferPointer(), signatureBlob->GetBufferSize(), IID_PPV_ARGS(&compositeRootSignature));
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "PostProcess: CreateRootSignature(composite)");
 
     // --- 2. シェーダーのコンパイル ---
-    IDxcUtils* dxcUtils;
-    IDxcCompiler3* dxcCompiler;
-    IDxcIncludeHandler* includeHandler;
-    DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxcUtils));
-    DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxcCompiler));
-    dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
+    Microsoft::WRL::ComPtr<IDxcUtils> dxcUtils;
+    Microsoft::WRL::ComPtr<IDxcCompiler3> dxcCompiler;
+    Microsoft::WRL::ComPtr<IDxcIncludeHandler> includeHandler;
+    hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxcUtils));
+    Logger::CheckHResult(hr, "PostProcess: DxcCreateInstance(DxcUtils)");
+    hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxcCompiler));
+    Logger::CheckHResult(hr, "PostProcess: DxcCreateInstance(DxcCompiler)");
+    hr = dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
+    Logger::CheckHResult(hr, "PostProcess: CreateDefaultIncludeHandler");
 
-    auto vsBlob = CompileShader(L"Resources/shaders/PostProcess.VS.hlsl", L"vs_6_0", dxcUtils, dxcCompiler, includeHandler, std::cout);
-    auto psBlob = CompileShader(L"Resources/shaders/PostProcess.PS.hlsl", L"ps_6_0", dxcUtils, dxcCompiler, includeHandler, std::cout);
+    auto vsBlob = CompileShader(L"Resources/shaders/PostProcess.VS.hlsl", L"vs_6_0", dxcUtils.Get(), dxcCompiler.Get(), includeHandler.Get(), std::cout);
+    auto psBlob = CompileShader(L"Resources/shaders/PostProcess.PS.hlsl", L"ps_6_0", dxcUtils.Get(), dxcCompiler.Get(), includeHandler.Get(), std::cout);
     assert(vsBlob && psBlob);
 
     // --- 3. PSO の作成 ---
@@ -230,7 +246,7 @@ void PostProcess::CreateGraphicsPipeline() {
     psoDesc.SampleDesc.Count = 1;
 
     hr = device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&compositePipelineState));
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "PostProcess: CreateGraphicsPipelineState(composite)");
 }
 
 void PostProcess::CreateExtractPipeline() {
@@ -274,20 +290,26 @@ void PostProcess::CreateExtractPipeline() {
     Microsoft::WRL::ComPtr<ID3DBlob> signatureBlob;
     Microsoft::WRL::ComPtr<ID3DBlob> errorBlob;
     HRESULT hr = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signatureBlob, &errorBlob);
-    assert(SUCCEEDED(hr));
+    if (FAILED(hr) && errorBlob) {
+        Logger::Log(reinterpret_cast<char*>(errorBlob->GetBufferPointer()));
+    }
+    Logger::CheckHResult(hr, "PostProcess: D3D12SerializeRootSignature(extract)");
     hr = device->CreateRootSignature(0, signatureBlob->GetBufferPointer(), signatureBlob->GetBufferSize(), IID_PPV_ARGS(&extractRootSignature));
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "PostProcess: CreateRootSignature(extract)");
 
     // --- 2. シェーダーのコンパイル ---
-    IDxcUtils* dxcUtils;
-    IDxcCompiler3* dxcCompiler;
-    IDxcIncludeHandler* includeHandler;
-    DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxcUtils));
-    DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxcCompiler));
-    dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
+    Microsoft::WRL::ComPtr<IDxcUtils> dxcUtils;
+    Microsoft::WRL::ComPtr<IDxcCompiler3> dxcCompiler;
+    Microsoft::WRL::ComPtr<IDxcIncludeHandler> includeHandler;
+    hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxcUtils));
+    Logger::CheckHResult(hr, "PostProcess: DxcCreateInstance(DxcUtils)");
+    hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxcCompiler));
+    Logger::CheckHResult(hr, "PostProcess: DxcCreateInstance(DxcCompiler)");
+    hr = dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
+    Logger::CheckHResult(hr, "PostProcess: CreateDefaultIncludeHandler");
 
-    auto vsBlob = CompileShader(L"Resources/shaders/PostProcess.VS.hlsl", L"vs_6_0", dxcUtils, dxcCompiler, includeHandler, std::cout);
-    auto psBlob = CompileShader(L"Resources/shaders/BrightnessExtract.PS.hlsl", L"ps_6_0", dxcUtils, dxcCompiler, includeHandler, std::cout);
+    auto vsBlob = CompileShader(L"Resources/shaders/PostProcess.VS.hlsl", L"vs_6_0", dxcUtils.Get(), dxcCompiler.Get(), includeHandler.Get(), std::cout);
+    auto psBlob = CompileShader(L"Resources/shaders/BrightnessExtract.PS.hlsl", L"ps_6_0", dxcUtils.Get(), dxcCompiler.Get(), includeHandler.Get(), std::cout);
     assert(vsBlob && psBlob);
 
     // --- 3. PSO の作成 ---
@@ -315,7 +337,7 @@ void PostProcess::CreateExtractPipeline() {
     psoDesc.SampleDesc.Count = 1;
 
     hr = device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&extractPipelineState));
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "PostProcess: CreateGraphicsPipelineState(extract)");
 }
 
 void PostProcess::CreateBlurPipeline() {
@@ -359,20 +381,26 @@ void PostProcess::CreateBlurPipeline() {
     Microsoft::WRL::ComPtr<ID3DBlob> signatureBlob;
     Microsoft::WRL::ComPtr<ID3DBlob> errorBlob;
     HRESULT hr = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signatureBlob, &errorBlob);
-    assert(SUCCEEDED(hr));
+    if (FAILED(hr) && errorBlob) {
+        Logger::Log(reinterpret_cast<char*>(errorBlob->GetBufferPointer()));
+    }
+    Logger::CheckHResult(hr, "PostProcess: D3D12SerializeRootSignature(blur)");
     hr = device->CreateRootSignature(0, signatureBlob->GetBufferPointer(), signatureBlob->GetBufferSize(), IID_PPV_ARGS(&blurRootSignature));
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "PostProcess: CreateRootSignature(blur)");
 
     // --- 2. シェーダーのコンパイル ---
-    IDxcUtils* dxcUtils;
-    IDxcCompiler3* dxcCompiler;
-    IDxcIncludeHandler* includeHandler;
-    DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxcUtils));
-    DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxcCompiler));
-    dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
+    Microsoft::WRL::ComPtr<IDxcUtils> dxcUtils;
+    Microsoft::WRL::ComPtr<IDxcCompiler3> dxcCompiler;
+    Microsoft::WRL::ComPtr<IDxcIncludeHandler> includeHandler;
+    hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxcUtils));
+    Logger::CheckHResult(hr, "PostProcess: DxcCreateInstance(DxcUtils)");
+    hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxcCompiler));
+    Logger::CheckHResult(hr, "PostProcess: DxcCreateInstance(DxcCompiler)");
+    hr = dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
+    Logger::CheckHResult(hr, "PostProcess: CreateDefaultIncludeHandler");
 
-    auto vsBlob = CompileShader(L"Resources/shaders/PostProcess.VS.hlsl", L"vs_6_0", dxcUtils, dxcCompiler, includeHandler, std::cout);
-    auto psBlob = CompileShader(L"Resources/shaders/GaussianBlur.PS.hlsl", L"ps_6_0", dxcUtils, dxcCompiler, includeHandler, std::cout);
+    auto vsBlob = CompileShader(L"Resources/shaders/PostProcess.VS.hlsl", L"vs_6_0", dxcUtils.Get(), dxcCompiler.Get(), includeHandler.Get(), std::cout);
+    auto psBlob = CompileShader(L"Resources/shaders/GaussianBlur.PS.hlsl", L"ps_6_0", dxcUtils.Get(), dxcCompiler.Get(), includeHandler.Get(), std::cout);
     assert(vsBlob && psBlob);
 
     // --- 3. PSO の作成 ---
@@ -400,15 +428,15 @@ void PostProcess::CreateBlurPipeline() {
     psoDesc.SampleDesc.Count = 1;
 
     hr = device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&blurPipelineState));
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "PostProcess: CreateGraphicsPipelineState(gaussianBlur)");
 
     // ボックスフィルターPSO：ルートシグネチャ・頂点シェーダー・各種ステートはガウシアンと共用し、
     // ピクセルシェーダーだけBoxBlur.PS.hlslに差し替える
-    auto boxPsBlob = CompileShader(L"Resources/shaders/BoxBlur.PS.hlsl", L"ps_6_0", dxcUtils, dxcCompiler, includeHandler, std::cout);
+    auto boxPsBlob = CompileShader(L"Resources/shaders/BoxBlur.PS.hlsl", L"ps_6_0", dxcUtils.Get(), dxcCompiler.Get(), includeHandler.Get(), std::cout);
     assert(boxPsBlob);
     psoDesc.PS = { boxPsBlob->GetBufferPointer(), boxPsBlob->GetBufferSize() };
     hr = device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&boxBlurPipelineState));
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "PostProcess: CreateGraphicsPipelineState(boxBlur)");
 }
 
 void PostProcess::PreDraw() {
@@ -424,7 +452,9 @@ void PostProcess::PreDraw() {
     D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dxCommon->GetDsvHandle();
     commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
 
-    commandList->ClearRenderTargetView(rtvHandle, DirectXCommon::kClearColor, 0, nullptr);
+    // DirectXCommon::PreDrawと同じく、黒帯部分は黒、ゲームの絵の範囲だけ背景色にする
+    commandList->ClearRenderTargetView(rtvHandle, DirectXCommon::kLetterboxColor, 0, nullptr);
+    commandList->ClearRenderTargetView(rtvHandle, DirectXCommon::kClearColor, 1, &dxCommon->GetScissorRect());
     commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
 }
 
@@ -558,10 +588,12 @@ void PostProcess::DrawFullScreenBlurPass() {
     bool useBox = boxBlurEnabled;
     float strength = useBox ? boxBlurStrength : screenBlurStrength;
 
-    D3D12_VIEWPORT viewport = dxCommon->GetViewport();
-    D3D12_RECT scissorRect = dxCommon->GetScissorRect();
-    float texelWidth = 1.0f / static_cast<float>(WinApp::KclientWidth);
-    float texelHeight = 1.0f / static_cast<float>(WinApp::KclientHeight);
+    // オフスクリーン同士のコピーなのでテクスチャ全体を1:1で処理する
+    // （dxCommonのビューポートはレターボックス時にバックバッファの一部だけになるため使わない）
+    D3D12_VIEWPORT viewport{ 0.0f, 0.0f, static_cast<float>(fullWidth), static_cast<float>(fullHeight), 0.0f, 1.0f };
+    D3D12_RECT scissorRect{ 0, 0, static_cast<LONG>(fullWidth), static_cast<LONG>(fullHeight) };
+    float texelWidth = 1.0f / static_cast<float>(fullWidth);
+    float texelHeight = 1.0f / static_cast<float>(fullHeight);
 
     // シーンテクスチャ(resource) -> 水平ブラー(fullBlurHResource) -> 垂直ブラー(fullBlurVResource=最終結果)
     DrawGaussianBlurPass(true, resource.Get(), srvIndex, fullBlurHResource.Get(), kFullBlurHRtvIndex,
@@ -573,9 +605,10 @@ void PostProcess::DrawFullScreenBlurPass() {
 void PostProcess::DrawCompositePass() {
     auto commandList = dxCommon->GetCommandList();
 
-    // 半解像度パスの後なのでフル解像度に戻す（忘れるとレティクル等のUIまで半解像度で歪む）
-    D3D12_VIEWPORT viewport = dxCommon->GetViewport();
-    D3D12_RECT scissorRect = dxCommon->GetScissorRect();
+    // 半解像度パスの後なのでフル解像度に戻す（忘れるとレティクル等のUIまで半解像度で歪む）。
+    // シーンテクスチャはバックバッファと同サイズで、黒帯込みの絵が入っているのでバックバッファ全体に1:1で合成する
+    D3D12_VIEWPORT viewport{ 0.0f, 0.0f, static_cast<float>(fullWidth), static_cast<float>(fullHeight), 0.0f, 1.0f };
+    D3D12_RECT scissorRect{ 0, 0, static_cast<LONG>(fullWidth), static_cast<LONG>(fullHeight) };
     commandList->RSSetViewports(1, &viewport);
     commandList->RSSetScissorRects(1, &scissorRect);
 
@@ -620,9 +653,9 @@ void PostProcess::DrawCompositePass() {
 void PostProcess::Draw() {
     DrawBrightnessExtractPass();
     DrawGaussianBlurPass(true, brightnessResource.Get(), brightnessSrvIndex, blurHResource.Get(), kBlurHRtvIndex,
-        bloomViewport, bloomScissorRect, 1.0f / static_cast<float>(kBloomWidth), 1.0f / static_cast<float>(kBloomHeight), blurStrength);
+        bloomViewport, bloomScissorRect, 1.0f / static_cast<float>(bloomWidth), 1.0f / static_cast<float>(bloomHeight), blurStrength);
     DrawGaussianBlurPass(false, blurHResource.Get(), blurHSrvIndex, blurVResource.Get(), kBlurVRtvIndex,
-        bloomViewport, bloomScissorRect, 1.0f / static_cast<float>(kBloomWidth), 1.0f / static_cast<float>(kBloomHeight), blurStrength);
+        bloomViewport, bloomScissorRect, 1.0f / static_cast<float>(bloomWidth), 1.0f / static_cast<float>(bloomHeight), blurStrength);
     DrawFullScreenBlurPass();
     DrawCompositePass();
 }

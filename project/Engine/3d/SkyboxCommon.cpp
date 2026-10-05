@@ -1,5 +1,6 @@
 #include "SkyboxCommon.h"
 #include "ShaderCompiler.h"
+#include "Logger.h"
 #include <cassert>
 
 using namespace ShaderCompiler;
@@ -9,11 +10,11 @@ void SkyboxCommon::Initialize(DirectXCommon* dxCommon, SrvManager* srvManager) {
     this->srvManager = srvManager;
 
     HRESULT hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxcUtils));
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "SkyboxCommon: DxcCreateInstance(DxcUtils)");
     hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxcCompiler));
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "SkyboxCommon: DxcCreateInstance(DxcCompiler)");
     hr = dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "SkyboxCommon: CreateDefaultIncludeHandler");
 
     CreateRootSignature();
     CreateGraphicsPipeline();
@@ -60,10 +61,13 @@ void SkyboxCommon::CreateRootSignature() {
     Microsoft::WRL::ComPtr<ID3DBlob> signatureBlob = nullptr;
     Microsoft::WRL::ComPtr<ID3DBlob> errorBlob = nullptr;
     HRESULT hr = D3D12SerializeRootSignature(&descriptionRootSignature, D3D_ROOT_SIGNATURE_VERSION_1, &signatureBlob, &errorBlob);
-    assert(SUCCEEDED(hr));
+    if (FAILED(hr) && errorBlob) {
+        Logger::Log(reinterpret_cast<char*>(errorBlob->GetBufferPointer()));
+    }
+    Logger::CheckHResult(hr, "SkyboxCommon: D3D12SerializeRootSignature");
 
     hr = dxCommon->GetDevice()->CreateRootSignature(0, signatureBlob->GetBufferPointer(), signatureBlob->GetBufferSize(), IID_PPV_ARGS(&rootSignature));
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "SkyboxCommon: CreateRootSignature");
 }
 
 void SkyboxCommon::CreateGraphicsPipeline() {
@@ -105,7 +109,7 @@ void SkyboxCommon::CreateGraphicsPipeline() {
     psoDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
 
     HRESULT hr = dxCommon->GetDevice()->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&pipelineState));
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "SkyboxCommon: CreateGraphicsPipelineState");
 }
 
 void SkyboxCommon::PreDraw() {

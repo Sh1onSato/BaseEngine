@@ -1,4 +1,5 @@
 #include "Model.h"
+#include "Logger.h"
 #include <fstream>
 
 void Model::Initialize(DirectXCommon* dxCommon, const std::string& directoryPath, const std::string& filename) {
@@ -47,7 +48,9 @@ MaterialData Model::LoadMaterialTemplateFile(const std::string& directoryPath, c
 	MaterialData materialData;
 	std::string line;
 	std::fstream file(directoryPath + "/" + filename);
-	assert(file.is_open());
+	if (!file.is_open()) {
+		Logger::Fatal("Model: cannot open " + directoryPath + "/" + filename);
+	}
 	while (std::getline(file, line)) {
 		std::string identifier;
 		std::istringstream s(line);
@@ -70,7 +73,9 @@ ModelData Model::LoadObjFile(const std::string& directoryPath, const std::string
 	std::vector<Vector2> texcoords;
 	std::string line;
 	std::fstream file(directoryPath + "/" + filename);
-	assert(file.is_open());
+	if (!file.is_open()) {
+		Logger::Fatal("Model: cannot open " + directoryPath + "/" + filename);
+	}
 	while (std::getline(file, line)) {
 		std::string identifier;
 		std::istringstream s(line);

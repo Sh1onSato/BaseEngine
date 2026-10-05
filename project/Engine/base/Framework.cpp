@@ -1,4 +1,5 @@
 #include "Framework.h"
+#include "Logger.h"
 #include "ModelManager.h"
 #include "CameraManager.h"
 #include "GameSettings.h"
@@ -49,6 +50,8 @@ void Framework::Initialize() {
 	AudioManager::GetInstance()->Initialize();
 	// 保存済みの設定（音量など）を読み込んでAudioManagerへ反映
 	GameSettings::GetInstance()->Load();
+	// ウィンドウサイズを先に戻してからフルスクリーンにする（フルスクリーン解除時にこのサイズへ戻るように）
+	winApp->SetClientSize(GameSettings::GetInstance()->GetWindowWidth(), GameSettings::GetInstance()->GetWindowHeight());
 	winApp->SetFullscreen(GameSettings::GetInstance()->GetFullscreen());
 #ifdef _DEBUG
 	// ImGuiはDebugビルドのみ初期化する（Release/Developmentでは調整UIとして使えないようにするため）
@@ -75,12 +78,27 @@ void Framework::Initialize() {
 	sceneManager = std::make_unique<SceneManager>();
 	sceneManager->Initialize(spriteCommon.get());
 
+	// ウィンドウの枠をドラッグしている間はメインループが止まるので、WinAppのタイマーから1フレームずつ進めてもらう
+	// （終了リクエストの確認はメインループに戻ってから行う）
+	winApp->SetModalTickCallback([this]() {
+		Update();
+		Draw();
+	});
+
 	// 初期化にかかった時間が最初のdeltaTimeに乗らないよう、最後に計測を開始する
 	Time::Initialize();
 }
 
 void Framework::Update() {
 	Time::Tick();
+	// ウィンドウサイズが変わっていたらバックバッファを作り直す。
+	// マウス座標の変換に新しいレイアウトを使うため、入力の更新より前に行う
+	// （前フレームのPostDrawでGPUの完了は待っているが、Resize内でも念のため待つ）
+	uint32_t width = 0;
+	uint32_t height = 0;
+	if (winApp->ConsumeResize(width, height)) {
+		dxCommon->Resize(width, height);
+	}
 	input->Update();
 	// フェードはポーズ(timeScale=0)中も進めたいのでunscaledを使う
 	AudioManager::GetInstance()->Update(Time::GetUnscaledDeltaTime());
@@ -91,6 +109,7 @@ void Framework::Update() {
 }
 
 void Framework::Finalize() {
+	winApp->SetModalTickCallback(nullptr);
 	sceneManager->Finalize();
 
 	// 各種マネージャーの終了処理
@@ -101,12 +120,19 @@ void Framework::Finalize() {
 	
 	// 設定画面で変えた値を次回起動時に引き継ぐ
 	GameSettings::GetInstance()->SetFullscreen(winApp->IsFullscreen());
+	// 枠をドラッグして変えたサイズも次回に引き継ぐ
+	uint32_t windowWidth = 0;
+	uint32_t windowHeight = 0;
+	winApp->GetWindowedClientSize(windowWidth, windowHeight);
+	GameSettings::GetInstance()->SetWindowSize(static_cast<int>(windowWidth), static_cast<int>(windowHeight));
 	GameSettings::GetInstance()->Save();
 	AudioManager::GetInstance()->Finalize();
 #ifdef _DEBUG
 	ImGuiManager::GetInstance()->Finalize();
 #endif
 	CloseHandle(dxCommon->GetFenceEvent());
+	// この後デバイスが解放されるので、Loggerに渡していた参照を外す
+	Logger::SetDiagnosticsDevice(nullptr);
 
 	winApp->Finalize();
 }

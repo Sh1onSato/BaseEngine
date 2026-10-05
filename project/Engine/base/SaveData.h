@@ -12,7 +12,7 @@
 //   save.SetInt("stage", stage + 1);
 //   save.Save();
 //
-// 相対パスは GetSaveDirectory()（%LOCALAPPDATA%\<exe名>\）基準で解決する。
+// 相対パスは GetSaveDirectory() 基準で解決する（開発環境からの起動なら <Engine>\generated\save\、配布したexeなら %LOCALAPPDATA%\<exe名>\）。
 // 作業ディレクトリ（VSから起動するとプロジェクトフォルダ）に書くと、ソースの横にファイルが増えてしまうため。
 class SaveData {
 public:
@@ -42,7 +42,8 @@ public:
     void SetString(const std::string& key, const std::string& value) { values[key] = JsonValue(value); }
     void SetValue(const std::string& key, const JsonValue& value) { values[key] = value; }
 
-    // セーブファイルの置き場所（%LOCALAPPDATA%\<exe名>\）。取得できなければexeと同じフォルダ
+    // セーブファイルの置き場所。exeが <Engine>\generated\outputs\<構成>\ にあれば <Engine>\generated\save\、
+    // それ以外（配布したexe）は %LOCALAPPDATA%\<exe名>\。取得できなければexeと同じフォルダ
     static std::filesystem::path GetSaveDirectory();
     static std::filesystem::path ResolvePath(const std::string& fileName);
 

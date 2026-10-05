@@ -1,8 +1,11 @@
 #include "Audio.h"
 #include "AudioCommon.h"
 #include "StringUtility.h"
+#include "Logger.h"
 #include <fstream>
 #include <cassert>
+#include <cstdint>
+#include <format>
 #include <vector>
 
 // Media Foundation 関連の明示的なインクルード
@@ -35,18 +38,23 @@ struct FormatChunk {
 Audio::SoundData Audio::SoundLoadWave(const std::string& filename) {
     std::ifstream file;
     file.open(filename, std::ios_base::binary);
-    assert(file.is_open());
+    if (!file.is_open()) {
+        Logger::Fatal("Audio: cannot open " + filename);
+    }
 
     RiffHeader riff;
     file.read((char*)&riff, sizeof(riff));
     if (strncmp(riff.chunk.id, "RIFF", 4) != 0 || strncmp(riff.type, "WAVE", 4) != 0) {
-        assert(false);
+        Logger::Fatal("Audio: not a RIFF/WAVE file " + filename);
     }
 
     FormatChunk format = {};
     while (file.read((char*)&format.chunk, sizeof(ChunkHeader))) {
         if (strncmp(format.chunk.id, "fmt ", 4) == 0) {
-            assert(format.chunk.size <= sizeof(format.fmt));
+            // 拡張fmt(WAVEFORMATEXTENSIBLE等)はWAVEFORMATEXに収まらず、読むとスタックを壊すので止める
+            if (format.chunk.size > sizeof(format.fmt)) {
+                Logger::Fatal("Audio: unsupported fmt chunk size in " + filename);
+            }
             file.read((char*)&format.fmt, format.chunk.size);
             break;
         } else {
@@ -82,7 +90,7 @@ Audio::SoundData Audio::SoundLoadCompressed(const std::string& filename) {
     Microsoft::WRL::ComPtr<IMFSourceReader> pSourceReader = nullptr;
     std::wstring wFilename = StringUtility::ConvertString(filename);
     hr = MFCreateSourceReaderFromURL(wFilename.c_str(), NULL, &pSourceReader);
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "Audio: MFCreateSourceReaderFromURL(" + filename + ")");
 
     // 2. メディアタイプの選択（PCMにデコードするように設定）
     Microsoft::WRL::ComPtr<IMFMediaType> pTargetMediaType = nullptr;
@@ -90,17 +98,17 @@ Audio::SoundData Audio::SoundLoadCompressed(const std::string& filename) {
     pTargetMediaType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio);
     pTargetMediaType->SetGUID(MF_MT_SUBTYPE, MFAudioFormat_PCM);
     hr = pSourceReader->SetCurrentMediaType((DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM, NULL, pTargetMediaType.Get());
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "Audio: SetCurrentMediaType(" + filename + ")");
 
     // 3. 最終的なフォーマットの取得
     Microsoft::WRL::ComPtr<IMFMediaType> pActualMediaType = nullptr;
     hr = pSourceReader->GetCurrentMediaType((DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM, &pActualMediaType);
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "Audio: GetCurrentMediaType(" + filename + ")");
 
     WAVEFORMATEX wfex = {};
     GUID subType;
     hr = pActualMediaType->GetGUID(MF_MT_SUBTYPE, &subType);
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "Audio: GetGUID(MF_MT_SUBTYPE)(" + filename + ")");
 
     // PCMフォーマットとして属性を取得
     UINT32 numChannels = 0;
@@ -170,7 +178,11 @@ Audio::Voice Audio::SoundPlayWave(const SoundData& soundData, bool loop, float v
 
     IXAudio2SourceVoice* pSourceVoice = nullptr;
     hr = xAudio2->CreateSourceVoice(&pSourceVoice, &soundData.wfex);
-    assert(SUCCEEDED(hr));
+    if (FAILED(hr)) {
+        // 再生できなくてもゲームは続行させる（無音になるだけ）
+        Logger::Log(std::format("Audio: CreateSourceVoice failed. HRESULT=0x{:08X}\n", static_cast<uint32_t>(hr)));
+        return Voice{};
+    }
 
     XAUDIO2_BUFFER buf = {};
     buf.pAudioData = soundData.pBuffer;

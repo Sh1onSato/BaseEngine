@@ -6,6 +6,7 @@
 #include"externals/imgui/imgui_impl_win32.h"
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 #include"TextureManager.h"
+#include "Screen.h"
 
 
 void Sprite::Initialize(SpriteCommon* spriteCommon, std::string textureFilePath){
@@ -135,9 +136,10 @@ void Sprite::Update() {
     // ビュー行列（スプライトは通常単位行列）
     Matrix4x4 viewMatrix = Calculation::MakeIdentity4x4();
 
-    // プロジェクション行列（平行投影 / 正射影行列）
+    // プロジェクション行列（平行投影 / 正射影行列）。ゲーム座標の範囲をビューポート全体に写す
+    Vector2 gameSize = Screen::GetGameSize();
     Matrix4x4 projectionMatrix = Calculation::MakeOrthographicMatrix(
-        0.0f, 0.0f, screenResolution.x, screenResolution.y, 0.0f, 100.0f);
+        0.0f, 0.0f, gameSize.x, gameSize.y, 0.0f, 100.0f);
 
     // 4. WVP行列の合成
     Matrix4x4 wvpMatrix = worldMatrix * viewMatrix * projectionMatrix;

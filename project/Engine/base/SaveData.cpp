@@ -24,6 +24,16 @@ namespace {
 std::filesystem::path SaveData::GetSaveDirectory() {
     std::filesystem::path exePath = GetExecutablePath();
 
+    // 開発環境から起動した場合（exeが <Engine>\generated\outputs\<構成>\ にある）は <Engine>\generated\save\ に保存する。
+    // 開発中に見つけやすく、generated は Git 管理外なので誤ってコミットされない。
+    // 配布したexe（フォルダ構成が違う）は書き込み禁止の場所に置かれても困らないよう %LOCALAPPDATA%\<exe名>\ に保存する
+    std::filesystem::path outputsDirectory = exePath.parent_path().parent_path();
+    std::filesystem::path generatedDirectory = outputsDirectory.parent_path();
+    if (_wcsicmp(outputsDirectory.filename().c_str(), L"outputs") == 0 &&
+        _wcsicmp(generatedDirectory.filename().c_str(), L"generated") == 0) {
+        return generatedDirectory / L"save";
+    }
+
     PWSTR localAppData = nullptr;
     std::filesystem::path directory;
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &localAppData))) {

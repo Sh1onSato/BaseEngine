@@ -1,4 +1,6 @@
 #include "SrvManager.h"
+#include "Logger.h"
+#include <format>
 
 void SrvManager::Initialize(DirectXCommon* dxCommon) {
     this->dxCommon = dxCommon;
@@ -10,8 +12,10 @@ void SrvManager::Initialize(DirectXCommon* dxCommon) {
 }
 
 uint32_t SrvManager::Allocate() {
-    // 上限チェック
-    assert(useCount < kMaxSRVCount);
+    // 上限チェック（超えるとヒープ外に書き込んで表示が壊れるのでReleaseでも止める）
+    if (useCount >= kMaxSRVCount) {
+        Logger::Fatal(std::format("SrvManager: SRV heap is full (kMaxSRVCount={})", kMaxSRVCount));
+    }
     // 現在の番号を返して、使用数を増やす
     uint32_t index = useCount;
     useCount++;

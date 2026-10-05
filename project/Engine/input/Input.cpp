@@ -1,5 +1,7 @@
 #include "Input.h"
 #include "GameTime.h"
+#include "Logger.h"
+#include "Screen.h"
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -24,23 +26,23 @@ void Input::Initialize(WinApp* winApp) {
         reinterpret_cast<void**>(directInput_.GetAddressOf()),
         nullptr
     );
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "Input: DirectInput8Create");
 
     // キーボードデバイスの生成
     hr = directInput_->CreateDevice(GUID_SysKeyboard, keyboard.GetAddressOf(), NULL);
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "Input: CreateDevice(Keyboard)");
     hr = keyboard->SetDataFormat(&c_dfDIKeyboard);
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "Input: Keyboard SetDataFormat");
     hr = keyboard->SetCooperativeLevel(winApp->GetHwnd(), DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY);
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "Input: Keyboard SetCooperativeLevel");
 
     // マウスデバイスの生成
     hr = directInput_->CreateDevice(GUID_SysMouse, mouse.GetAddressOf(), NULL);
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "Input: CreateDevice(Mouse)");
     hr = mouse->SetDataFormat(&c_dfDIMouse2);
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "Input: Mouse SetDataFormat");
     hr = mouse->SetCooperativeLevel(winApp->GetHwnd(), DISCL_FOREGROUND | DISCL_NONEXCLUSIVE);
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "Input: Mouse SetCooperativeLevel");
 
     // 起動直後に全パッドを確認させる
     disconnectedPollCounter = 0;
@@ -68,12 +70,9 @@ void Input::Update() {
 
     POINT cursor{};
     if (GetCursorPos(&cursor) && ScreenToClient(winApp->GetHwnd(), &cursor)) {
-        // ウィンドウサイズが変わっていてもゲーム内座標(KclientWidth x KclientHeight)で返す
-        RECT client{};
-        GetClientRect(winApp->GetHwnd(), &client);
-        float scaleX = client.right > 0 ? static_cast<float>(WinApp::KclientWidth) / static_cast<float>(client.right) : 1.0f;
-        float scaleY = client.bottom > 0 ? static_cast<float>(WinApp::KclientHeight) / static_cast<float>(client.bottom) : 1.0f;
-        mousePosition = { static_cast<float>(cursor.x) * scaleX, static_cast<float>(cursor.y) * scaleY };
+        // ウィンドウサイズやレターボックスの黒帯に関係なく、ゲーム座標(Screen::GetGameSize())で返す。
+        // 黒帯の上では範囲外（負の値やゲームサイズ超え）になる
+        mousePosition = Screen::ClientToGame({ static_cast<float>(cursor.x), static_cast<float>(cursor.y) });
     }
 
     // --- コントローラー (XInput) ---

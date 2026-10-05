@@ -1,5 +1,6 @@
 #include "SpriteCommon.h"
 #include "Calculation.h"
+#include "Logger.h"
 using namespace ShaderCompiler;
 void SpriteCommon::Initialize(DirectXCommon* dxCommon, SrvManager* srvManager) {
 	this->dxCommon = dxCommon; // 受け取ったポインタをメンバ変数に保存
@@ -7,11 +8,11 @@ void SpriteCommon::Initialize(DirectXCommon* dxCommon, SrvManager* srvManager) {
 	// --- dxcCompilerの初期化 ---
 	HRESULT hr = S_OK; // これを追加
 	hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxcUtils));
-	assert(SUCCEEDED(hr));
+	Logger::CheckHResult(hr, "SpriteCommon: DxcCreateInstance(DxcUtils)");
 	hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxcCompiler));
-	assert(SUCCEEDED(hr));
+	Logger::CheckHResult(hr, "SpriteCommon: DxcCreateInstance(DxcCompiler)");
 	hr = dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
-	assert(SUCCEEDED(hr));
+	Logger::CheckHResult(hr, "SpriteCommon: CreateDefaultIncludeHandler");
 
 	// --- Shaderのコンパイル ---
 	vertexShaderBlob = CompileShader(
@@ -104,14 +105,14 @@ void SpriteCommon::Initialize(DirectXCommon* dxCommon, SrvManager* srvManager) {
 		&graphicsPipelineStateDesc, // パイプラインステートの設定
 		IID_PPV_ARGS(&graphicsPipelineState) // パイプラインステートのポインタ
 	);
-	assert(SUCCEEDED(hr));
+	Logger::CheckHResult(hr, "SpriteCommon: CreateGraphicsPipelineState");
 
 	// --- t2(gSkinMatrices)用のダミーパレット（単位行列1個）を作成 ---
 	// Spriteはスキニングしないが、Object3d.VS.hlslを共用しているため常時何かをバインドする必要がある
 	defaultBonePaletteResource = dxCommon->CreatBufferResource(sizeof(Matrix4x4));
 	Matrix4x4* defaultBonePaletteData = nullptr;
 	hr = defaultBonePaletteResource->Map(0, nullptr, reinterpret_cast<void**>(&defaultBonePaletteData));
-	assert(SUCCEEDED(hr));
+	Logger::CheckHResult(hr, "SpriteCommon: Map defaultBonePaletteResource");
 	*defaultBonePaletteData = Calculation::MakeIdentity4x4();
 	defaultBonePaletteResource->Unmap(0, nullptr);
 }
@@ -209,9 +210,12 @@ void SpriteCommon::CreateRootSignature(){
 	Microsoft::WRL::ComPtr<ID3DBlob> signatureBlob = nullptr;
 	Microsoft::WRL::ComPtr<ID3DBlob> errorBlob = nullptr;
 	hr = D3D12SerializeRootSignature(&descriptionRootSignature, D3D_ROOT_SIGNATURE_VERSION_1, &signatureBlob, &errorBlob);
-	assert(SUCCEEDED(hr));
+	if (FAILED(hr) && errorBlob) {
+		Logger::Log(reinterpret_cast<char*>(errorBlob->GetBufferPointer()));
+	}
+	Logger::CheckHResult(hr, "SpriteCommon: D3D12SerializeRootSignature");
 	hr = dxCommon->GetDevice()->CreateRootSignature(0, signatureBlob->GetBufferPointer(), signatureBlob->GetBufferSize(), IID_PPV_ARGS(&rootSignature));
-	assert(SUCCEEDED(hr));
+	Logger::CheckHResult(hr, "SpriteCommon: CreateRootSignature");
 }
 
 void SpriteCommon::PreDraw(){

@@ -1,4 +1,5 @@
 #include "AudioCommon.h"
+#include "Logger.h"
 #include <cassert>
 
 AudioCommon* AudioCommon::instance = nullptr;
@@ -13,13 +14,13 @@ AudioCommon* AudioCommon::GetInstance() {
 void AudioCommon::Initialize() {
     // Media Foundationの初期化
     HRESULT hr = MFStartup(MF_VERSION, MFSTARTUP_NOSOCKET);
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "AudioCommon: MFStartup");
 
     hr = XAudio2Create(&xAudio2, 0, XAUDIO2_DEFAULT_PROCESSOR);
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "AudioCommon: XAudio2Create");
 
     hr = xAudio2->CreateMasteringVoice(&masteringVoice);
-    assert(SUCCEEDED(hr));
+    Logger::CheckHResult(hr, "AudioCommon: CreateMasteringVoice");
 }
 
 void AudioCommon::Finalize() {

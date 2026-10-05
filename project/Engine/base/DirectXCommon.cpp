@@ -3,6 +3,7 @@
 #include <cassert>
 #include "Logger.h"
 #include "StringUtility.h"
+#include "Screen.h"
 #include <thread>
 
 #pragma comment(lib, "d3d12.lib")
@@ -16,7 +17,7 @@ using namespace StringUtility;
 void DirectXCommon::Initialize(WinApp* winApp) {
     this->winApp = winApp;
     HRESULT hr = CreateDXGIFactory1(IID_PPV_ARGS(&dxgiFactory));
-    assert(SUCCEEDED(hr));
+    CheckHResult(hr, "DirectXCommon: CreateDXGIFactory1");
 
 #ifdef _DEBUG
     ComPtr<ID3D12Debug1> debugController = nullptr;
@@ -29,14 +30,16 @@ void DirectXCommon::Initialize(WinApp* winApp) {
     for (UINT i = 0; dxgiFactory->EnumAdapterByGpuPreference(i, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&useAdpter)) != DXGI_ERROR_NOT_FOUND; i++) {
         DXGI_ADAPTER_DESC3 adapterDesc{};
         hr = useAdpter->GetDesc3(&adapterDesc);
-        assert(SUCCEEDED(hr));
+        CheckHResult(hr, "DirectXCommon: Adapter GetDesc3");
         if (!(adapterDesc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)) {
             Log(ConvertString(std::format(L"Use Adapter:{}\n", adapterDesc.Description)));
             break;
         }
         useAdpter = nullptr;
     }
-    assert(useAdpter != nullptr);
+    if (useAdpter == nullptr) {
+        Fatal("DirectXCommon: no hardware adapter found");
+    }
 
     // デバイス生成
     D3D_FEATURE_LEVEL featureLevels[] = { D3D_FEATURE_LEVEL_12_2, D3D_FEATURE_LEVEL_12_1, D3D_FEATURE_LEVEL_12_0 };
@@ -44,7 +47,9 @@ void DirectXCommon::Initialize(WinApp* winApp) {
         hr = D3D12CreateDevice(useAdpter.Get(), featureLevels[i], IID_PPV_ARGS(&device));
         if (SUCCEEDED(hr)) break;
     }
-    assert(device != nullptr);
+    CheckHResult(hr, "DirectXCommon: D3D12CreateDevice");
+    // 以降のHRESULT失敗時にデバイスロストの理由もログに出せるようにする
+    SetDiagnosticsDevice(device.Get());
 
 #ifdef _DEBUG
     if (SUCCEEDED(device->QueryInterface(IID_PPV_ARGS(&infoQueue)))) {
@@ -67,17 +72,22 @@ void DirectXCommon::Initialize(WinApp* winApp) {
     device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAllocator));
     device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocator.Get(), nullptr, IID_PPV_ARGS(&commandList));
 
-    // スワップチェーン
+    // スワップチェーン（バックバッファはウィンドウのクライアントサイズに合わせる）
+    winApp->GetClientSize(backBufferWidth, backBufferHeight);
+    if (backBufferWidth == 0 || backBufferHeight == 0) {
+        backBufferWidth = static_cast<uint32_t>(Screen::GetBaseSize().x);
+        backBufferHeight = static_cast<uint32_t>(Screen::GetBaseSize().y);
+    }
     DXGI_SWAP_CHAIN_DESC1 swapChainDesc{};
-    swapChainDesc.Width = WinApp::KclientWidth;
-    swapChainDesc.Height = WinApp::KclientHeight;
+    swapChainDesc.Width = backBufferWidth;
+    swapChainDesc.Height = backBufferHeight;
     swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     swapChainDesc.SampleDesc.Count = 1;
     swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    swapChainDesc.BufferCount = 2;
+    swapChainDesc.BufferCount = kSwapChainBufferCount;
     swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
     hr = dxgiFactory->CreateSwapChainForHwnd(commandQueue.Get(), winApp->GetHwnd(), &swapChainDesc, nullptr, nullptr, reinterpret_cast<IDXGISwapChain1**>(swapChain.GetAddressOf()));
-    assert(SUCCEEDED(hr));
+    CheckHResult(hr, "DirectXCommon: CreateSwapChainForHwnd");
     // Alt+EnterはWinApp側でボーダーレスフルスクリーンとして処理するので、DXGIの排他フルスクリーン切り替えは無効にする
     dxgiFactory->MakeWindowAssociation(winApp->GetHwnd(), DXGI_MWA_NO_ALT_ENTER);
 
@@ -90,28 +100,16 @@ void DirectXCommon::Initialize(WinApp* winApp) {
     CreateSwapChainRTV();
 
     // DSV作成
-    depthStencilResource = CreateDepthStencilTexureResource(WinApp::KclientWidth, WinApp::KclientHeight);
-    
-    // DSVの設定
-    D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
-    dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT; // フォーマット
-    dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D; // 2Dテクスチャ
-    device->CreateDepthStencilView(depthStencilResource.Get(), &dsvDesc, dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+    CreateDepthBuffer(backBufferWidth, backBufferHeight);
 
     // 同期・描画設定
     device->CreateFence(fenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
     fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
 
-    viewport.Width = (float)WinApp::KclientWidth;
-    viewport.Height = (float)WinApp::KclientHeight;
-    viewport.TopLeftX = 0.0f;
-    viewport.TopLeftY = 0.0f;
-    viewport.MinDepth = 0.0f;
-    viewport.MaxDepth = 1.0f;
-    scissorRect.left = 0;
-    scissorRect.top = 0;
-    scissorRect.right = WinApp::KclientWidth;
-    scissorRect.bottom = WinApp::KclientHeight;
+    // バックバッファのサイズからゲームの絵を描く範囲（ビューポート）を決める
+    Screen::UpdateLayout(backBufferWidth, backBufferHeight);
+    viewport = Screen::GetViewport();
+    scissorRect = Screen::GetScissorRect();
 
 
     // 1. ルートパラメータ（シェーダーへの窓口）の設定
@@ -164,10 +162,10 @@ void DirectXCommon::Initialize(WinApp* winApp) {
     ComPtr<ID3DBlob> signature;
     ComPtr<ID3DBlob> error;
     hr = D3D12SerializeRootSignature(&descriptionRootSignature, D3D_ROOT_SIGNATURE_VERSION_1, &signature, &error);
-    if (FAILED(hr)) {
+    if (FAILED(hr) && error) {
         Log(reinterpret_cast<char*>(error->GetBufferPointer()));
-        assert(false);
     }
+    CheckHResult(hr, "DirectXCommon: D3D12SerializeRootSignature");
 
     device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&rootSignature));
 
@@ -175,6 +173,10 @@ void DirectXCommon::Initialize(WinApp* winApp) {
 }
 
 void DirectXCommon::PreDraw(){
+    // Screen::SetScaleMode()等でレイアウトが変わっても次のフレームから反映されるよう、毎フレーム取り込む
+    viewport = Screen::GetViewport();
+    scissorRect = Screen::GetScissorRect();
+
     // バックバッファの番号を取得
     UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
 
@@ -193,8 +195,16 @@ void DirectXCommon::PreDraw(){
     
     commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
 
-    // 画面全体をクリア
-    commandList->ClearRenderTargetView(rtvHandle, kClearColor, 0, nullptr);
+    // 画面をクリア。ビューポートがバックバッファ全体でないとき（レターボックス）は、
+    // 全体を黒帯の色で塗ってから、ゲームの絵の範囲だけ背景色で塗る
+    const bool coversWholeBuffer = scissorRect.left == 0 && scissorRect.top == 0 &&
+        scissorRect.right == static_cast<LONG>(backBufferWidth) && scissorRect.bottom == static_cast<LONG>(backBufferHeight);
+    if (coversWholeBuffer) {
+        commandList->ClearRenderTargetView(rtvHandle, kClearColor, 0, nullptr);
+    } else {
+        commandList->ClearRenderTargetView(rtvHandle, kLetterboxColor, 0, nullptr);
+        commandList->ClearRenderTargetView(rtvHandle, kClearColor, 1, &scissorRect);
+    }
     // 深度とステンシルの両方をクリア
     commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
 
@@ -216,13 +226,14 @@ void DirectXCommon::PostDraw(){
 
     // コマンドリストを閉じて実行
     HRESULT hr = commandList->Close();
-    assert(SUCCEEDED(hr));
+    CheckHResult(hr, "DirectXCommon: CommandList Close");
 
     ID3D12CommandList* commandLists[] = { commandList.Get() };
     commandQueue->ExecuteCommandLists(1, commandLists);
 
-    // 画面の入れ替え
-    swapChain->Present(1, 0);
+    // 画面の入れ替え（デバイスロストはここで返ってくることが多い）
+    hr = swapChain->Present(1, 0);
+    CheckHResult(hr, "DirectXCommon: Present");
 
     // GPUの完了を待機
     WaitForGpu();
@@ -231,9 +242,9 @@ void DirectXCommon::PostDraw(){
 
     // 次のフレーム用の準備
     hr = commandAllocator->Reset();
-    assert(SUCCEEDED(hr));
+    CheckHResult(hr, "DirectXCommon: CommandAllocator Reset");
     hr = commandList->Reset(commandAllocator.Get(), nullptr);
-    assert(SUCCEEDED(hr));
+    CheckHResult(hr, "DirectXCommon: CommandList Reset");
 }
 
 void DirectXCommon::WaitForGpu(){
@@ -253,10 +264,10 @@ void DirectXCommon::CreateSwapChainRTV(){
 
     D3D12_CPU_DESCRIPTOR_HANDLE rtvStartHandle = rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
 
-    for (uint32_t i = 0; i < 2; i++) {
+    for (uint32_t i = 0; i < kSwapChainBufferCount; i++) {
         // スワップチェーンからバッファを取得
         HRESULT hr = swapChain->GetBuffer(i, IID_PPV_ARGS(&swapChainResources[i]));
-        assert(SUCCEEDED(hr));
+        CheckHResult(hr, std::format("DirectXCommon: SwapChain GetBuffer({})", i));
 
         // 書き込むハンドルの場所を計算
         D3D12_CPU_DESCRIPTOR_HANDLE handle = rtvStartHandle;
@@ -265,6 +276,48 @@ void DirectXCommon::CreateSwapChainRTV(){
         // RTVの生成
         device->CreateRenderTargetView(swapChainResources[i].Get(), &rtvDesc, handle);
     }
+}
+
+void DirectXCommon::CreateDepthBuffer(uint32_t width, uint32_t height) {
+    depthStencilResource = CreateDepthStencilTexureResource(static_cast<int32_t>(width), static_cast<int32_t>(height));
+
+    // DSVの設定（メイン深度はDSVヒープの先頭を使う）
+    D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
+    dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT; // フォーマット
+    dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D; // 2Dテクスチャ
+    device->CreateDepthStencilView(depthStencilResource.Get(), &dsvDesc, dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+}
+
+void DirectXCommon::Resize(uint32_t width, uint32_t height) {
+    // 最小化中(0x0)やサイズが変わっていないときは何もしない
+    if (width == 0 || height == 0) {
+        return;
+    }
+    if (width == backBufferWidth && height == backBufferHeight) {
+        return;
+    }
+
+    // バックバッファを参照しているコマンドが残っているとResizeBuffersが失敗するので、GPUの完了を待つ
+    WaitForGpu();
+
+    // スワップチェーンのバッファへの参照を全て外してからでないとResizeBuffersできない
+    for (uint32_t i = 0; i < kSwapChainBufferCount; i++) {
+        swapChainResources[i].Reset();
+    }
+    HRESULT hr = swapChain->ResizeBuffers(kSwapChainBufferCount, width, height, DXGI_FORMAT_UNKNOWN, 0);
+    CheckHResult(hr, "DirectXCommon: ResizeBuffers");
+
+    backBufferWidth = width;
+    backBufferHeight = height;
+
+    // RTVと深度バッファを新しいサイズで作り直す
+    CreateSwapChainRTV();
+    CreateDepthBuffer(width, height);
+
+    // ゲームの絵を描く範囲を計算し直す
+    Screen::UpdateLayout(width, height);
+    viewport = Screen::GetViewport();
+    scissorRect = Screen::GetScissorRect();
 }
 
 // ヘルパー関数群（引数にdeviceを取らない形に整理）
@@ -308,7 +361,7 @@ ComPtr<ID3D12Resource> DirectXCommon::CreateDepthStencilTexureResource(int32_t w
         &clear,
         IID_PPV_ARGS(&res)
     );
-    assert(SUCCEEDED(hr));
+    CheckHResult(hr, "DirectXCommon: CreateCommittedResource(depth stencil)");
     return res;
 }
 
@@ -342,7 +395,7 @@ ComPtr<ID3D12Resource> DirectXCommon::CreateShadowMapResource(int32_t width, int
         &clear,
         IID_PPV_ARGS(&res)
     );
-    assert(SUCCEEDED(hr));
+    CheckHResult(hr, "DirectXCommon: CreateCommittedResource(shadow map)");
     return res;
 }
 

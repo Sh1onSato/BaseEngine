@@ -2,6 +2,7 @@
 #include "TitleScene.h"
 #include "GameScene.h"
 #include "SkinningTestScene.h"
+#include "EngineTestScene.h"
 #include "Logger.h"
 #include <format>
 
@@ -19,6 +20,10 @@ BaseScene* SceneFactory::CreateScene(const std::string& sceneName) {
     else if (sceneName == "SKINNING_TEST") {
         // スケルタルアニメーション フェーズ1（スキニング描画パイプラインの土台）の検証用シーン
         newScene = new SkinningTestScene();
+    }
+    else if (sceneName == "ENGINE_TEST") {
+        // Text・音・パッド・フェード遷移・フルスクリーンを実行画面で確認する検証用シーン
+        newScene = new EngineTestScene();
     }
     else {
         // 該当なしの場合は無言でnullptrを返すと「シーンが何も更新・描画されない」という
