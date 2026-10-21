@@ -76,9 +76,12 @@ namespace Collision {
     bool RayTriangle(const Ray& ray, const Vector3& v0, const Vector3& v1, const Vector3& v2, RaycastHit* outHit = nullptr, float maxDistance = 1e30f);
 
     // --- 2D ---
-    bool CircleCircle(const Circle& a, const Circle& b);
-    bool RectRect(const Rect& a, const Rect& b);
-    bool CircleRect(const Circle& circle, const Rect& rect);
+    // outInfo の normal は z = 0 の3Dベクトルで返す（向きは3Dと同じく B→A。A に normal * depth を足すと離れる）
+    bool CircleCircle(const Circle& a, const Circle& b, CollisionInfo* outInfo = nullptr);
+    // 押し戻し情報はめり込みが小さい方の軸（X か Y）で返す
+    bool RectRect(const Rect& a, const Rect& b, CollisionInfo* outInfo = nullptr);
+    // A = 円、B = 四角。円の中心が四角の内側にあるときは、一番近い辺から外へ押し出す向きを返す
+    bool CircleRect(const Circle& circle, const Rect& rect, CollisionInfo* outInfo = nullptr);
     bool PointInRect(const Vector2& point, const Rect& rect);
     bool PointInCircle(const Vector2& point, const Circle& circle);
 }

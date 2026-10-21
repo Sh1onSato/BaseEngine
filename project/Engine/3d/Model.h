@@ -12,7 +12,8 @@ public:
     void Initialize(DirectXCommon* dxCommon, const std::string& directoryPath, const std::string& filename);
     // OBJファイルを介さず、頂点データを直接渡して初期化する（プロシージャル生成用。外部リソース不要）
     void InitializeFromVertices(DirectXCommon* dxCommon, const std::vector<VertexData>& vertices, const std::string& textureFilePath = "white");
-    void Draw(ID3D12GraphicsCommandList* commandList);
+    // instanceCount: 同じモデルを何個まとめて描くか（インスタンシング用。通常は1）
+    void Draw(ID3D12GraphicsCommandList* commandList, UINT instanceCount = 1);
 
     // Getter
     const D3D12_VERTEX_BUFFER_VIEW& GetVertexBufferView() const { return vertexBufferView; }

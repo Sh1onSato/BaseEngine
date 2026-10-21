@@ -35,12 +35,12 @@ void Model::CreateVertexBuffer(DirectXCommon* dxCommon) {
 	vertexResource->Unmap(0, nullptr);
 }
 
-void Model::Draw(ID3D12GraphicsCommandList* commandList) {
+void Model::Draw(ID3D12GraphicsCommandList* commandList, UINT instanceCount) {
 	// 描画コマンドの発行
 	commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
 	uint32_t textureIndex = TextureManager::GetInstance()->GetTextureIndexByFilePath(modelData.material.textureFilePath);
 	commandList->SetGraphicsRootDescriptorTable(2, TextureManager::GetInstance()->GetSrvHandleGPU(textureIndex));
-	commandList->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);
+	commandList->DrawInstanced(UINT(modelData.vertices.size()), instanceCount, 0, 0);
 
 }
 

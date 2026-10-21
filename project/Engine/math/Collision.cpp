@@ -390,24 +390,76 @@ bool Collision::RayTriangle(const Ray& ray, const Vector3& v0, const Vector3& v1
 
 // ===== 2D =====
 
-bool Collision::CircleCircle(const Circle& a, const Circle& b) {
-    Vector2 d = a.center - b.center;
-    float radius = a.radius + b.radius;
-    return d.x * d.x + d.y * d.y <= radius * radius;
+bool Collision::CircleCircle(const Circle& a, const Circle& b, CollisionInfo* outInfo) {
+    // z = 0 の3D点として扱えば、球同士と同じ共通処理が使える（中心が重なったときは画面の上向き {0,-1,0}）
+    Vector3 pointA = { a.center.x, a.center.y, 0.0f };
+    Vector3 pointB = { b.center.x, b.center.y, 0.0f };
+    if (!ResolvePointDistance(pointA, pointB, a.radius + b.radius, outInfo)) {
+        return false;
+    }
+    if (outInfo && LengthSq(pointA - pointB) < kEpsilon * kEpsilon) {
+        outInfo->normal = { 0.0f, -1.0f, 0.0f };
+    }
+    return true;
 }
 
-bool Collision::RectRect(const Rect& a, const Rect& b) {
-    return a.min.x <= b.max.x && a.max.x >= b.min.x &&
-           a.min.y <= b.max.y && a.max.y >= b.min.y;
+bool Collision::RectRect(const Rect& a, const Rect& b, CollisionInfo* outInfo) {
+    if (a.min.x > b.max.x || a.max.x < b.min.x ||
+        a.min.y > b.max.y || a.max.y < b.min.y) {
+        return false;
+    }
+
+    if (outInfo) {
+        // めり込みが小さい方の軸で押し戻す（角に当たったとき壁に沿って滑れるようにするため）
+        float overlapX = (std::min)(a.max.x, b.max.x) - (std::max)(a.min.x, b.min.x);
+        float overlapY = (std::min)(a.max.y, b.max.y) - (std::max)(a.min.y, b.min.y);
+        float centerDiffX = (a.min.x + a.max.x) * 0.5f - (b.min.x + b.max.x) * 0.5f;
+        float centerDiffY = (a.min.y + a.max.y) * 0.5f - (b.min.y + b.max.y) * 0.5f;
+        if (overlapX < overlapY) {
+            // 中心が同じ位置のときは右へ押し出す
+            outInfo->normal = { centerDiffX >= 0.0f ? 1.0f : -1.0f, 0.0f, 0.0f };
+            outInfo->depth = overlapX;
+        } else {
+            // 中心が同じ位置のときは上（画面座標では -Y）へ押し出す
+            outInfo->normal = { 0.0f, centerDiffY > 0.0f ? 1.0f : -1.0f, 0.0f };
+            outInfo->depth = overlapY;
+        }
+    }
+    return true;
 }
 
-bool Collision::CircleRect(const Circle& circle, const Rect& rect) {
-    Vector2 closest = {
+namespace {
+    // 円の中心が四角の内側にあるとき、一番近い辺から外へ出る向きと距離を返す
+    void PushCircleOutOfRect(const Circle& circle, const Rect& rect, CollisionInfo* outInfo) {
+        const float distances[4] = {
+            circle.center.x - rect.min.x, rect.max.x - circle.center.x,
+            circle.center.y - rect.min.y, rect.max.y - circle.center.y,
+        };
+        const Vector3 normals[4] = {
+            { -1.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f },
+            { 0.0f, -1.0f, 0.0f }, { 0.0f, 1.0f, 0.0f },
+        };
+        int best = static_cast<int>(std::min_element(distances, distances + 4) - distances);
+        outInfo->normal = normals[best];
+        outInfo->depth = distances[best] + circle.radius;
+    }
+}
+
+bool Collision::CircleRect(const Circle& circle, const Rect& rect, CollisionInfo* outInfo) {
+    if (PointInRect(circle.center, rect)) {
+        if (outInfo) {
+            PushCircleOutOfRect(circle, rect, outInfo);
+        }
+        return true;
+    }
+    Vector3 center = { circle.center.x, circle.center.y, 0.0f };
+    Vector3 closest = {
         (std::clamp)(circle.center.x, rect.min.x, rect.max.x),
         (std::clamp)(circle.center.y, rect.min.y, rect.max.y),
+        0.0f,
     };
-    Vector2 d = circle.center - closest;
-    return d.x * d.x + d.y * d.y <= circle.radius * circle.radius;
+    // 中心が外側なら最近接点との距離は0にならないので、球と同じ共通処理でよい
+    return ResolvePointDistance(center, closest, circle.radius, outInfo);
 }
 
 bool Collision::PointInRect(const Vector2& point, const Rect& rect) {

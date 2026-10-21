@@ -1,5 +1,6 @@
 #include "EngineTestScene.h"
 #include "AudioManager.h"
+#include "Calculation.h"
 #include "Framework.h"
 #include "GameSettings.h"
 #include "GameTime.h"
@@ -7,11 +8,13 @@
 #include "SceneManager.h"
 #include "Screen.h"
 #include "SpriteCommon.h"
+#include "TextureManager.h"
 #include "WinApp.h"
 #ifdef _DEBUG
 #include "externals/imgui/imgui.h"
 #endif
 #include <algorithm>
+#include <cmath>
 #include <format>
 #include <iterator>
 
@@ -62,6 +65,39 @@ namespace {
         { XINPUT_GAMEPAD_DPAD_RIGHT, "→" },
     };
 
+    // スプライトテスト（画面左下に配置。画面いっぱいモードでも左下に付くよう毎フレーム置き直す）
+    const Vector2 kSpriteTestOffset = { 20.0f, -100.0f }; // 左下基準のオフセット（テスト領域の左上）
+    constexpr float kBlendSquareSize = 64.0f;
+    const Vector4 kBlendBaseColors[] = {
+        { 1.0f, 0.2f, 0.2f, 1.0f },
+        { 0.2f, 1.0f, 0.2f, 1.0f },
+        { 0.2f, 0.4f, 1.0f, 1.0f },
+    };
+    // レイヤーテストの表示用（kBlendBaseColorsと同じ並び）
+    const char* const kBlendBaseColorNames[] = { "赤", "緑", "青" };
+    const Vector4 kBlendTopColor = { 1.0f, 0.85f, 0.3f, 0.6f }; // 通常ブレンドで半透明が分かるようα=0.6
+    // digitFontアトラスの先頭5グリフ（7x9セル×5）を6倍に拡大して表示する
+    const Vector2 kFilterTexSize = { 35.0f, 9.0f };
+    constexpr float kFilterScale = 6.0f;
+    constexpr float kFilterOffsetX = 200.0f; // テスト領域左端からのX位置
+
+    // 2Dカメラテスト（ワールド座標。原点にキャラ、原点中心にグリッド背景）
+    const char* kTestSheetPath = "Resources/textures/test_sheet.png";
+    const char* kTestGridPath = "Resources/textures/test_grid.png";
+    constexpr int kWorldSpriteLayer = -10;            // UI（レイヤー0〜）より奥
+    constexpr float kGridWorldSize = 2048.0f;         // グリッド背景の大きさ（256pxの画像をWRAPで8x8枚並べる）
+    const Vector2 kSheetFrameSize = { 64.0f, 64.0f }; // test_sheet.png の1コマ
+    constexpr uint32_t kSheetColumns = 4;
+    constexpr uint32_t kSheetRows = 2;
+    constexpr float kCharacterSize = 128.0f;
+    const char* kIdleClip = "idle";
+    const char* kSpinClip = "spin";
+    constexpr float kCameraMoveSpeed = 300.0f;        // 画面上で1秒に動くピクセル数（ズームに関係なく同じ見た目の速さ）
+    constexpr float kCameraZoomPerSecond = 2.0f;      // 1秒押し続けるとズームが2倍(1/2倍)になる
+    constexpr float kCameraMinZoom = 0.25f;
+    constexpr float kCameraMaxZoom = 4.0f;
+    constexpr float kCameraRotateSpeed = Calculation::kPi * 0.5f; // 1秒で90度
+
     float StepVolume(float current, float delta) {
         return (std::clamp)(current + delta, 0.0f, 1.0f);
     }
@@ -82,26 +118,27 @@ void EngineTestScene::Initialize() {
     titleText->SetPosition({ 20.0f, 16.0f });
 
     helpText = std::make_unique<Text>();
-    helpText->Initialize(spriteCommon, 22.0f);
+    // 左下のスプライトテスト領域と重ならないよう、行をまとめて文字も少し小さくしている
+    helpText->Initialize(spriteCommon, 20.0f);
     helpText->SetText(
         "【音】\n"
         "[1] SE再生（連打で重ねがけ）\n"
         "[2] BGM A / [3] BGM B（1秒フェードで切り替え）\n"
-        "[4] BGM停止（1秒フェードアウト）\n"
-        "[5] BGM一時停止 / 再開\n"
-        "[6] BGMピッチ 1.0 ⇔ 1.5\n"
+        "[4] BGM停止  [5] 一時停止/再開  [6] ピッチ1.5\n"
         "[↑][↓] BGM音量  [←][→] SE音量\n"
         "【パッド】\n"
         "[A] SE＋弱い振動0.3秒  [B] 強い振動1秒\n"
         "[V]キー でも振動0.5秒\n"
         "【シーン遷移】\n"
-        "[R] 黒フェード(1秒)で読み直し\n"
-        "[W] 白フェード(0.5秒)で読み直し\n"
+        "[R] 黒(1秒) / [W] 白(0.5秒) フェードで読み直し\n"
         "【画面・文字】\n"
-        "[F11] / [Alt+Enter] フルスクリーン切替\n"
-        "[M] 表示モード切替（黒帯 / 画面いっぱい）\n"
-        "[9] ウィンドウサイズ 1280x720→1600x900→1920x1080\n"
-        "[C] タイトル文字の色を変える");
+        "[F11]/[Alt+Enter] フルスクリーン  [M] 表示モード\n"
+        "[9] ウィンドウサイズ切替  [C] タイトルの色\n"
+        "【スプライト（左下）】\n"
+        "[B]キー ブレンド  [N]キー フィルタ  [L] レイヤー回転\n"
+        "【2Dカメラ・アニメ（中央のワールド）】\n"
+        "[T][F][G][H] 移動  [Q][E] ズーム  [Z][X] 回転\n"
+        "[0] カメラリセット  [K] spinを1回再生");
     helpText->SetPosition({ 20.0f, 80.0f });
 
     statusText = std::make_unique<Text>();
@@ -114,11 +151,175 @@ void EngineTestScene::Initialize() {
     alignText->SetAlign(Text::Align::kCenter);
     alignText->SetAnchorPoint({ 1.0f, 1.0f });
     alignText->SetColor({ 0.7f, 1.0f, 0.7f, 1.0f });
+
+    InitializeSpriteTest();
+    InitializeCameraTest();
+}
+
+void EngineTestScene::InitializeCameraTest() {
+    SpriteCommon* spriteCommon = Framework::GetInstance()->GetSpriteCommon();
+    // SetUseCamera(true) のSpriteはこのカメラで描かれる（Finalizeで必ず外す）
+    camera2D = Camera2D();
+    spriteCommon->SetCamera2D(&camera2D);
+
+    TextureManager::GetInstance()->LoadTexture(kTestGridPath);
+    TextureManager::GetInstance()->LoadTexture(kTestSheetPath);
+
+    // グリッド背景：切り出し範囲を画像より大きくして、WRAPサンプラーでタイル状に繰り返す
+    worldGridSprite = std::make_unique<Sprite>();
+    worldGridSprite->Initialize(spriteCommon, kTestGridPath);
+    worldGridSprite->SetTexLeftTop({ 0.0f, 0.0f });
+    worldGridSprite->SetTexSize({ kGridWorldSize, kGridWorldSize });
+    worldGridSprite->SetSize({ kGridWorldSize, kGridWorldSize });
+    worldGridSprite->SetAnchorPoint({ 0.5f, 0.5f });
+    worldGridSprite->SetPosition({ 0.0f, 0.0f });
+    worldGridSprite->SetUseCamera(true);
+    worldGridSprite->SetLayer(kWorldSpriteLayer);
+
+    // アニメーションするキャラ（ドット絵風にくっきり見えるようポイントフィルタ）
+    characterSprite = std::make_unique<Sprite>();
+    characterSprite->Initialize(spriteCommon, kTestSheetPath);
+    characterSprite->SetSize({ kCharacterSize, kCharacterSize });
+    characterSprite->SetAnchorPoint({ 0.5f, 0.5f });
+    characterSprite->SetPosition({ 0.0f, 0.0f });
+    characterSprite->SetTextureFilter(Sprite::TextureFilter::kPoint);
+    characterSprite->SetUseCamera(true);
+    characterSprite->SetLayer(kWorldSpriteLayer);
+
+    characterAnimation = SpriteAnimation();
+    characterAnimation.SetSheet(kSheetColumns, kSheetRows, kSheetFrameSize);
+    characterAnimation.AddClip(kIdleClip, 0, 4, 6.0f, true);   // 1〜4コマ目をループ
+    characterAnimation.AddClip(kSpinClip, 4, 4, 12.0f, false); // 5〜8コマ目を1回だけ
+    characterAnimation.Play(kIdleClip);
+}
+
+void EngineTestScene::UpdateCameraTest(Input* input) {
+    UpdateCameraControl(input);
+
+    // [K]でspinを最初から1回再生し、終わったらidleに戻す
+    if (input->TriggerKey(DIK_K)) {
+        characterAnimation.Play(kSpinClip, true);
+    }
+    if (characterAnimation.GetCurrentClipName() == kSpinClip && characterAnimation.IsFinished()) {
+        characterAnimation.Play(kIdleClip);
+    }
+    characterAnimation.Update(Time::GetDeltaTime());
+    // 切り出し範囲を変えてから Update で頂点に反映する
+    characterAnimation.Apply(*characterSprite);
+
+    worldGridSprite->Update();
+    characterSprite->Update();
+}
+
+void EngineTestScene::UpdateCameraControl(Input* input) {
+    const float deltaTime = Time::GetDeltaTime();
+
+    // 移動：画面上の上下左右に動くよう、画面方向の移動量をカメラの回転・ズームでワールドに戻す
+    Vector2 screenDir = { 0.0f, 0.0f };
+    if (input->PushKey(DIK_T)) { screenDir.y -= 1.0f; }
+    if (input->PushKey(DIK_G)) { screenDir.y += 1.0f; }
+    if (input->PushKey(DIK_F)) { screenDir.x -= 1.0f; }
+    if (input->PushKey(DIK_H)) { screenDir.x += 1.0f; }
+    float c = std::cos(camera2D.GetRotation());
+    float s = std::sin(camera2D.GetRotation());
+    Vector2 worldDir = { screenDir.x * c - screenDir.y * s, screenDir.x * s + screenDir.y * c };
+    camera2D.Move(worldDir * (kCameraMoveSpeed * deltaTime / camera2D.GetZoom()));
+
+    // ズーム：掛け算で変える（どの倍率でも同じ感覚で拡大縮小する）
+    float zoomRate = 0.0f;
+    if (input->PushKey(DIK_E)) { zoomRate += 1.0f; }
+    if (input->PushKey(DIK_Q)) { zoomRate -= 1.0f; }
+    float zoom = camera2D.GetZoom() * std::pow(kCameraZoomPerSecond, zoomRate * deltaTime);
+    camera2D.SetZoom((std::clamp)(zoom, kCameraMinZoom, kCameraMaxZoom));
+
+    // 回転
+    if (input->PushKey(DIK_Z)) { camera2D.SetRotation(camera2D.GetRotation() - kCameraRotateSpeed * deltaTime); }
+    if (input->PushKey(DIK_X)) { camera2D.SetRotation(camera2D.GetRotation() + kCameraRotateSpeed * deltaTime); }
+
+    if (input->TriggerKey(DIK_0)) {
+        camera2D = Camera2D();
+    }
+}
+
+void EngineTestScene::InitializeSpriteTest() {
+    SpriteCommon* spriteCommon = Framework::GetInstance()->GetSpriteCommon();
+
+    // ブレンドテスト用の四角（内部生成の1x1白テクスチャを色で塗る）
+    for (size_t i = 0; i < kBlendBaseSpriteCount; ++i) {
+        blendBaseSprites[i] = std::make_unique<Sprite>();
+        blendBaseSprites[i]->Initialize(spriteCommon, "white");
+        blendBaseSprites[i]->SetSize({ kBlendSquareSize, kBlendSquareSize });
+        blendBaseSprites[i]->SetColor(kBlendBaseColors[i]);
+    }
+    blendTopSprite = std::make_unique<Sprite>();
+    blendTopSprite->Initialize(spriteCommon, "white");
+    blendTopSprite->SetSize({ kBlendSquareSize * 1.5f, kBlendSquareSize });
+    blendTopSprite->SetColor(kBlendTopColor);
+    blendTopSprite->SetBlendMode(blendTestMode);
+    blendTopSprite->SetLayer(kBlendTopLayer); // 3色のレイヤーをどう回しても常に一番手前
+    ApplyLayerTest();
+
+    // フィルタテスト用の拡大文字（"digitFont"は未生成なら生成される）
+    TextureManager::GetInstance()->CreateInternalDigitFontTexture();
+    filterTestSprite = std::make_unique<Sprite>();
+    filterTestSprite->Initialize(spriteCommon, "digitFont");
+    filterTestSprite->SetTexLeftTop({ 0.0f, 0.0f });
+    filterTestSprite->SetTexSize(kFilterTexSize);
+    filterTestSprite->SetSize({ kFilterTexSize.x * kFilterScale, kFilterTexSize.y * kFilterScale });
+    filterTestSprite->SetTextureFilter(usePointFilter ? Sprite::TextureFilter::kPoint : Sprite::TextureFilter::kLinear);
+}
+
+void EngineTestScene::UpdateSpriteTest(Input* input) {
+    if (input->TriggerKey(DIK_B)) {
+        size_t next = (static_cast<size_t>(blendTestMode) + 1) % kSpriteBlendModeCount;
+        blendTestMode = static_cast<SpriteBlendMode>(next);
+        blendTopSprite->SetBlendMode(blendTestMode);
+    }
+    if (input->TriggerKey(DIK_N)) {
+        usePointFilter = !usePointFilter;
+        filterTestSprite->SetTextureFilter(usePointFilter ? Sprite::TextureFilter::kPoint : Sprite::TextureFilter::kLinear);
+    }
+    if (input->TriggerKey(DIK_L)) {
+        layerTestShift = (layerTestShift + 1) % static_cast<int>(kBlendBaseSpriteCount);
+        ApplyLayerTest();
+    }
+
+    // 左下基準で配置（3色は16pxずつ重ね、黄色はその上に跨るように置く）
+    Vector2 origin = Screen::GetAnchoredPosition({ 0.0f, 1.0f }, kSpriteTestOffset);
+    const float step = kBlendSquareSize * 0.75f;
+    for (size_t i = 0; i < kBlendBaseSpriteCount; ++i) {
+        blendBaseSprites[i]->SetPosition({ origin.x + step * static_cast<float>(i), origin.y });
+        blendBaseSprites[i]->Update();
+    }
+    blendTopSprite->SetPosition({ origin.x + kBlendSquareSize * 0.5f, origin.y + kBlendSquareSize * 0.5f });
+    blendTopSprite->Update();
+    filterTestSprite->SetPosition({ origin.x + kFilterOffsetX, origin.y });
+    filterTestSprite->Update();
+}
+
+void EngineTestScene::ApplyLayerTest() {
+    // i番目の四角のレイヤー = (i + shift) % 3。shiftを進めるたびに一番手前の四角が 青→緑→赤 と変わる
+    for (size_t i = 0; i < kBlendBaseSpriteCount; ++i) {
+        int layer = (static_cast<int>(i) + layerTestShift) % static_cast<int>(kBlendBaseSpriteCount);
+        blendBaseSprites[i]->SetLayer(layer);
+    }
+}
+
+size_t EngineTestScene::GetFrontBlendBaseIndex() const {
+    size_t frontIndex = 0;
+    for (size_t i = 1; i < kBlendBaseSpriteCount; ++i) {
+        if (blendBaseSprites[i]->GetLayer() > blendBaseSprites[frontIndex]->GetLayer()) {
+            frontIndex = i;
+        }
+    }
+    return frontIndex;
 }
 
 void EngineTestScene::Finalize() {
     // 読み直し後のシーンは何も鳴っていない状態から始める（画面が暗転し切ったところで止まる）
     AudioManager::GetInstance()->StopBGM();
+    // camera2Dはこのシーンと一緒に破棄されるので、SpriteCommonに残すとダングリングポインタになる
+    Framework::GetInstance()->GetSpriteCommon()->SetCamera2D(nullptr);
 }
 
 void EngineTestScene::Update() {
@@ -127,6 +328,8 @@ void EngineTestScene::Update() {
     UpdateAudio(input);
     UpdatePad(input);
     UpdateSceneChange(input);
+    UpdateSpriteTest(input);
+    UpdateCameraTest(input);
 
     if (input->TriggerKey(DIK_C)) {
         titleColorIndex = (titleColorIndex + 1) % static_cast<int>(std::size(kTitleColors));
@@ -206,7 +409,19 @@ void EngineTestScene::UpdateDebugUI(Input* input) {
 #endif
 
 void EngineTestScene::Draw() {
-    Framework::GetInstance()->GetSpriteCommon()->PreDraw();
+    // Drawは描画キューに積むだけ。実際の描画はSceneManagerがシーンのDraw後にFlushでレイヤー順に行う
+    // 2Dカメラテスト（ワールド座標。レイヤー-10なのでUIより奥に描かれる）
+    worldGridSprite->Draw();
+    characterSprite->Draw();
+
+    // スプライトテスト（3色はこの呼び出し順のまま固定。前後関係は[L]で回すレイヤーで決まる。
+    // 黄色の四角はレイヤー10なので常に手前。ブレンドモードの切替はFlush時に行われる）
+    for (const std::unique_ptr<Sprite>& sprite : blendBaseSprites) {
+        sprite->Draw();
+    }
+    blendTopSprite->Draw();
+    filterTestSprite->Draw();
+
     titleText->Draw();
     helpText->Draw();
     statusText->Draw();
@@ -301,6 +516,8 @@ std::string EngineTestScene::BuildStatusText(Input* input) const {
     if (!bgmName.empty()) {
         bgmState = isBgmPaused ? "一時停止" : "再生中";
     }
+    // マウスのゲーム座標をカメラで逆変換して、指しているワールド座標を出す
+    Vector2 mouseWorld = camera2D.ScreenToWorld(input->GetMousePosition());
 
     std::string text = std::format(
         "FPS: {:.1f}  ({:.2f}ms)\n"
@@ -312,6 +529,13 @@ std::string EngineTestScene::BuildStatusText(Input* input) const {
         "BGM: {} [{}]\n"
         "ピッチ: {:.1f}\n"
         "音量 Master:{:.1f} BGM:{:.1f} SE:{:.1f}\n"
+        "\n"
+        "ブレンド: {}  フィルタ: {}\n"
+        "レイヤー: {}が手前\n"
+        "\n"
+        "カメラ: ({:.0f}, {:.0f}) x{:.2f} {:.0f}度\n"
+        "マウス(ワールド): ({:.0f}, {:.0f})\n"
+        "アニメ: {} コマ{}\n"
         "\n",
         fps, fps > 0.0f ? 1000.0f / fps : 0.0f,
         winApp->IsFullscreen() ? "ON" : "OFF",
@@ -320,7 +544,13 @@ std::string EngineTestScene::BuildStatusText(Input* input) const {
         input->GetMousePosition().x, input->GetMousePosition().y,
         bgmName.empty() ? "-" : bgmName, bgmState,
         isPitchUp ? kPitchUpRatio : 1.0f,
-        settings->GetMasterVolume(), settings->GetBgmVolume(), settings->GetSeVolume());
+        settings->GetMasterVolume(), settings->GetBgmVolume(), settings->GetSeVolume(),
+        GetSpriteBlendModeName(blendTestMode), usePointFilter ? "Point" : "Linear",
+        kBlendBaseColorNames[GetFrontBlendBaseIndex()],
+        camera2D.GetPosition().x, camera2D.GetPosition().y, camera2D.GetZoom(),
+        camera2D.GetRotation() * 180.0f / Calculation::kPi,
+        mouseWorld.x, mouseWorld.y,
+        characterAnimation.GetCurrentClipName(), characterAnimation.GetCurrentFrame() + 1);
 
     if (!input->IsPadConnected()) {
         text += "パッド0: 未接続";

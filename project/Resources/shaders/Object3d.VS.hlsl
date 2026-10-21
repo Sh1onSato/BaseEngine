@@ -33,5 +33,6 @@ VertexShaderOutput main(VertexShaderInput input){
     output.texcoord = input.texcoord;
     output.normal = normalize(mul(float4(skinnedNormal, 0.0f), gTransformationMatrix.World).xyz);
     output.worldPosition = mul(skinnedPosition, gTransformationMatrix.World).xyz;
+    output.instanceColor = float4(1.0f, 1.0f, 1.0f, 1.0f); // 色は gMaterial.color だけで決める
     return output;
 }

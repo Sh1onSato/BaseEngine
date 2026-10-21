@@ -16,7 +16,7 @@ class SpriteCommon;
 //   text.SetText("スコア: 1200\nHIGH SCORE: 5000");
 //   text.SetPosition({ 20.0f, 20.0f });
 //   text.Update();   // Update中に呼ぶ（画像の作り直しはここで行う。Draw中はGPU転送できないため）
-//   text.Draw();     // SpriteCommon::PreDraw()の後に呼ぶ
+//   text.Draw();     // 描画キューに積む（実際の描画はSceneManagerがFlushで行う）
 class Text {
 public:
     enum class Align {
@@ -46,6 +46,8 @@ public:
     // 文字画像の拡大率（フォントサイズを変えずに一時的に大きくする演出用。大きくするとぼやける）
     void SetScale(float scale);
     void SetRotation(float rotation);
+    // 描画レイヤー（大きいほど手前。Initializeの後に呼ぶ）
+    void SetLayer(int layer);
 
     // 文字列を描画したときの大きさ(px、Scale適用前)
     Vector2 GetSize() const { return textureSize; }

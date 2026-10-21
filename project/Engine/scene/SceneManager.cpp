@@ -84,11 +84,16 @@ void SceneManager::Draw() {
     if (currentScene) {
         currentScene->Draw();
     }
+    // シーンが積んだスプライトをレイヤー順に描画する
+    if (spriteCommon) {
+        spriteCommon->Flush();
+    }
 
     // フェード用の板を最前面に描画
+    // （シーンのFlushとは別に後からFlushするので、レイヤー値に関係なく必ず一番手前になる）
     if (fadeSprite && spriteCommon && fadeAlpha > 0.0f) {
-        spriteCommon->PreDraw();
         fadeSprite->Draw();
+        spriteCommon->Flush();
     }
 }
 

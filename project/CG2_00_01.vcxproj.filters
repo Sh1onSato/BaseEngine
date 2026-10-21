@@ -43,6 +43,9 @@
     <Filter Include="ソース ファイル\engine\scene">
       <UniqueIdentifier>{6ed9b7fc-fac7-4df8-96bc-9159f5b4a280}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ソース ファイル\engine\object">
+      <UniqueIdentifier>{5d3f8a21-7c4e-4b9a-9e61-2f0c8d7b4a13}</UniqueIdentifier>
+    </Filter>
     <Filter Include="ソース ファイル\application">
       <UniqueIdentifier>{83b8ce44-52f8-4801-832d-13124732b5fd}</UniqueIdentifier>
     </Filter>
@@ -69,6 +72,9 @@
     </Filter>
     <Filter Include="ヘッダー ファイル\engine\scene">
       <UniqueIdentifier>{1a879f21-2471-418d-9446-52b71ea77592}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\engine\object">
+      <UniqueIdentifier>{a8e2c4f7-3b61-4d0e-8f95-6c1b7e9d2a54}</UniqueIdentifier>
     </Filter>
     <Filter Include="ヘッダー ファイル\application">
       <UniqueIdentifier>{2f64137e-d850-4408-bec5-eea09761a58a}</UniqueIdentifier>
@@ -124,6 +130,12 @@
       <Filter>ソース ファイル\engine\2d</Filter>
     </ClCompile>
     <ClCompile Include="Engine\2d\Sprite.cpp">
+      <Filter>ソース ファイル\engine\2d</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\2d\Camera2D.cpp">
+      <Filter>ソース ファイル\engine\2d</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\2d\SpriteAnimation.cpp">
       <Filter>ソース ファイル\engine\2d</Filter>
     </ClCompile>
     <ClCompile Include="Engine\2d\BitmapText.cpp">
@@ -186,6 +198,12 @@
     <ClCompile Include="Engine\3d\ModelManager.cpp">
       <Filter>ソース ファイル\engine\3d</Filter>
     </ClCompile>
+    <ClCompile Include="Engine\3d\PrimitiveMesh.cpp">
+      <Filter>ソース ファイル\engine\3d</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\3d\ModelInstancer.cpp">
+      <Filter>ソース ファイル\engine\3d</Filter>
+    </ClCompile>
     <ClCompile Include="Engine\3d\GltfLoader.cpp">
       <Filter>ソース ファイル\engine\3d</Filter>
     </ClCompile>
@@ -215,6 +233,51 @@
     </ClCompile>
     <ClCompile Include="Engine\scene\EngineTestScene.cpp">
       <Filter>ソース ファイル\engine\scene</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\scene\ObjectTestScene.cpp">
+      <Filter>ソース ファイル\engine\scene</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\scene\ObjectTestObjects.cpp">
+      <Filter>ソース ファイル\engine\scene</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\scene\ObjectTest3DObjects.cpp">
+      <Filter>ソース ファイル\engine\scene</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\scene\ObjectTest3DMode.cpp">
+      <Filter>ソース ファイル\engine\scene</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\scene\LevelTestScene.cpp">
+      <Filter>ソース ファイル\engine\scene</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\scene\InstancingTestScene.cpp">
+      <Filter>ソース ファイル\engine\scene</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\scene\PhysicsTestScene.cpp">
+      <Filter>ソース ファイル\engine\scene</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\object\GameObject.cpp">
+      <Filter>ソース ファイル\engine\object</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\object\GameObjectManager.cpp">
+      <Filter>ソース ファイル\engine\object</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\object\Collider.cpp">
+      <Filter>ソース ファイル\engine\object</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\object\CollisionManager.cpp">
+      <Filter>ソース ファイル\engine\object</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\object\LevelLoader.cpp">
+      <Filter>ソース ファイル\engine\object</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\object\LevelSpawner.cpp">
+      <Filter>ソース ファイル\engine\object</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\object\ModelObject.cpp">
+      <Filter>ソース ファイル\engine\object</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\object\Rigidbody.cpp">
+      <Filter>ソース ファイル\engine\object</Filter>
     </ClCompile>
     <ClCompile Include="Engine\3d\CameraManager.cpp">
       <Filter>ソース ファイル\engine\3d</Filter>
@@ -255,6 +318,12 @@
       <Filter>シェーダーファイル</Filter>
     </FxCompile>
     <FxCompile Include="Resources\shaders\Object3d.VS.hlsl">
+      <Filter>シェーダーファイル</Filter>
+    </FxCompile>
+    <FxCompile Include="Resources\shaders\Sprite.VS.hlsl">
+      <Filter>シェーダーファイル</Filter>
+    </FxCompile>
+    <FxCompile Include="Resources\shaders\Sprite.PS.hlsl">
       <Filter>シェーダーファイル</Filter>
     </FxCompile>
     <FxCompile Include="Resources\shaders\Particle.PS.hlsl">
@@ -340,6 +409,12 @@
     <ClInclude Include="Engine\2d\Sprite.h">
       <Filter>ヘッダー ファイル\engine\2d</Filter>
     </ClInclude>
+    <ClInclude Include="Engine\2d\Camera2D.h">
+      <Filter>ヘッダー ファイル\engine\2d</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\2d\SpriteAnimation.h">
+      <Filter>ヘッダー ファイル\engine\2d</Filter>
+    </ClInclude>
     <ClInclude Include="Engine\2d\BitmapText.h">
       <Filter>ヘッダー ファイル\engine\2d</Filter>
     </ClInclude>
@@ -347,6 +422,9 @@
       <Filter>ヘッダー ファイル\engine\2d</Filter>
     </ClInclude>
     <ClInclude Include="Engine\2d\SpriteCommon.h">
+      <Filter>ヘッダー ファイル\engine\2d</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\2d\SpriteBlendMode.h">
       <Filter>ヘッダー ファイル\engine\2d</Filter>
     </ClInclude>
     <ClInclude Include="Engine\base\StringUtility.h">
@@ -430,6 +508,54 @@
     <ClInclude Include="Engine\scene\EngineTestScene.h">
       <Filter>ヘッダー ファイル\engine\scene</Filter>
     </ClInclude>
+    <ClInclude Include="Engine\scene\ObjectTestScene.h">
+      <Filter>ヘッダー ファイル\engine\scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\scene\ObjectTestObjects.h">
+      <Filter>ヘッダー ファイル\engine\scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\scene\ObjectTest3DObjects.h">
+      <Filter>ヘッダー ファイル\engine\scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\scene\ObjectTest3DMode.h">
+      <Filter>ヘッダー ファイル\engine\scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\scene\LevelTestScene.h">
+      <Filter>ヘッダー ファイル\engine\scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\scene\InstancingTestScene.h">
+      <Filter>ヘッダー ファイル\engine\scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\scene\PhysicsTestScene.h">
+      <Filter>ヘッダー ファイル\engine\scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\object\GameObject.h">
+      <Filter>ヘッダー ファイル\engine\object</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\object\GameObjectManager.h">
+      <Filter>ヘッダー ファイル\engine\object</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\object\Collider.h">
+      <Filter>ヘッダー ファイル\engine\object</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\object\CollisionManager.h">
+      <Filter>ヘッダー ファイル\engine\object</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\object\LevelData.h">
+      <Filter>ヘッダー ファイル\engine\object</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\object\LevelLoader.h">
+      <Filter>ヘッダー ファイル\engine\object</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\object\LevelSpawner.h">
+      <Filter>ヘッダー ファイル\engine\object</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\object\ModelObject.h">
+      <Filter>ヘッダー ファイル\engine\object</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\object\Rigidbody.h">
+      <Filter>ヘッダー ファイル\engine\object</Filter>
+    </ClInclude>
     <ClInclude Include="Engine\3d\CameraManager.h">
       <Filter>ヘッダー ファイル\engine\3d</Filter>
     </ClInclude>
@@ -457,6 +583,12 @@
     <ClInclude Include="Engine\3d\ModelManager.h">
       <Filter>ヘッダー ファイル\engine\3d</Filter>
     </ClInclude>
+    <ClInclude Include="Engine\3d\PrimitiveMesh.h">
+      <Filter>ヘッダー ファイル\engine\3d</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\3d\ModelInstancer.h">
+      <Filter>ヘッダー ファイル\engine\3d</Filter>
+    </ClInclude>
     <ClInclude Include="Engine\3d\Skybox.h">
       <Filter>ヘッダー ファイル\engine\3d</Filter>
     </ClInclude>
@@ -474,6 +606,9 @@
       <Filter>シェーダーファイル</Filter>
     </None>
     <None Include="Resources\shaders\Particle.hlsli">
+      <Filter>シェーダーファイル</Filter>
+    </None>
+    <None Include="Resources\shaders\Sprite.hlsli">
       <Filter>シェーダーファイル</Filter>
     </None>
   </ItemGroup>

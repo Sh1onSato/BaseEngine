@@ -3,6 +3,10 @@
 #include "GameScene.h"
 #include "SkinningTestScene.h"
 #include "EngineTestScene.h"
+#include "ObjectTestScene.h"
+#include "LevelTestScene.h"
+#include "InstancingTestScene.h"
+#include "PhysicsTestScene.h"
 #include "Logger.h"
 #include <format>
 
@@ -24,6 +28,22 @@ BaseScene* SceneFactory::CreateScene(const std::string& sceneName) {
     else if (sceneName == "ENGINE_TEST") {
         // Text・音・パッド・フェード遷移・フルスクリーンを実行画面で確認する検証用シーン
         newScene = new EngineTestScene();
+    }
+    else if (sceneName == "OBJECT_TEST") {
+        // GameObject / GameObjectManager（生成・削除・タグ検索・Update中の生成）の検証用シーン
+        newScene = new ObjectTestScene();
+    }
+    else if (sceneName == "LEVEL_TEST") {
+        // レベルデータ（LevelLoader / LevelSpawner・F5 の読み直し）の検証用シーン
+        newScene = new LevelTestScene();
+    }
+    else if (sceneName == "INSTANCING_TEST") {
+        // ModelInstancer（インスタンシング描画）と Object3d の1体ずつ描画の比較用シーン
+        newScene = new InstancingTestScene();
+    }
+    else if (sceneName == "PHYSICS_TEST") {
+        // 物理（Rigidbody・重力・跳ね返り・摩擦・接地・動く床・補間）の検証用シーン
+        newScene = new PhysicsTestScene();
     }
     else {
         // 該当なしの場合は無言でnullptrを返すと「シーンが何も更新・描画されない」という

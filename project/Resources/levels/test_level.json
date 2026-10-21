@@ -1,0 +1,88 @@
+{
+  "name": "test_level",
+  "objects": [
+    {
+      "type": "MESH", "name": "Floor",
+      "transform": { "translation": [0, 0, -0.5], "rotation": [0, 0, 0], "scaling": [20, 20, 1] },
+      "collider": { "type": "BOX", "center": [0, 0, 0], "size": [1, 1, 1] }
+    },
+    {
+      "type": "MESH", "name": "Wall.North",
+      "transform": { "translation": [0, 10.5, 1], "rotation": [0, 0, 0], "scaling": [21, 1, 2] },
+      "collider": { "type": "BOX", "center": [0, 0, 0], "size": [1, 1, 1] }
+    },
+    {
+      "type": "MESH", "name": "Wall.South",
+      "transform": { "translation": [0, -10.5, 1], "rotation": [0, 0, 0], "scaling": [21, 1, 2] },
+      "collider": { "type": "BOX", "center": [0, 0, 0], "size": [1, 1, 1] }
+    },
+    {
+      "type": "MESH", "name": "Wall.East",
+      "transform": { "translation": [10.5, 0, 1], "rotation": [0, 0, 0], "scaling": [1, 20, 2] },
+      "collider": { "type": "BOX", "center": [0, 0, 0], "size": [1, 1, 1] }
+    },
+    {
+      "type": "MESH", "name": "Wall.West",
+      "transform": { "translation": [-10.5, 0, 1], "rotation": [0, 0, 0], "scaling": [1, 20, 2] },
+      "collider": { "type": "BOX", "center": [0, 0, 0], "size": [1, 1, 1] }
+    },
+    {
+      "type": "MESH", "name": "Box.Rotated",
+      "transform": { "translation": [4, 3, 1], "rotation": [0, 0, 35], "scaling": [3, 1.5, 2] },
+      "collider": { "type": "BOX", "center": [0, 0, 0], "size": [1, 1, 1] }
+    },
+    {
+      "type": "MESH", "name": "Ball",
+      "transform": { "translation": [-4, 4, 1.5], "rotation": [0, 0, 0], "scaling": [3, 3, 3] },
+      "collider": { "type": "SPHERE", "center": [0, 0, 0], "radius": 0.5 }
+    },
+    {
+      "type": "MESH", "name": "Rock", "file_name": "rock",
+      "transform": { "translation": [6, -4, 0.5], "rotation": [0, 0, 0], "scaling": [1, 1, 1] },
+      "collider": { "type": "BOX", "center": [0, 0, 0], "size": [1, 1, 1] }
+    },
+    {
+      "type": "MESH", "name": "Player",
+      "transform": { "translation": [0, -6, 0.51], "rotation": [0, 0, 0], "scaling": [1, 1, 1] }
+    },
+    {
+      "type": "MESH", "name": "Coin.001", "class": "Coin", "score": 10,
+      "transform": { "translation": [-2, -3, 0.6], "rotation": [0, 0, 0], "scaling": [0.8, 0.8, 0.8] },
+      "collider": { "type": "SPHERE", "center": [0, 0, 0], "radius": 0.5 }
+    },
+    {
+      "type": "MESH", "name": "Coin.002", "class": "Coin", "score": 10,
+      "transform": { "translation": [2, -3, 0.6], "rotation": [0, 0, 0], "scaling": [0.8, 0.8, 0.8] },
+      "collider": { "type": "SPHERE", "center": [0, 0, 0], "radius": 0.5 }
+    },
+    {
+      "type": "MESH", "name": "Coin.003", "class": "Coin", "score": 50,
+      "transform": { "translation": [7, 7, 0.6], "rotation": [0, 0, 0], "scaling": [0.8, 0.8, 0.8] },
+      "collider": { "type": "SPHERE", "center": [0, 0, 0], "radius": 0.5 }
+    },
+    {
+      "type": "CAMERA", "name": "Camera",
+      "transform": { "translation": [0, -18, 16], "rotation": [45, 0, 0], "scaling": [1, 1, 1] }
+    },
+    {
+      "type": "MESH", "name": "Hidden", "disabled": true,
+      "transform": { "translation": [0, 0, 3], "rotation": [0, 0, 0], "scaling": [1, 1, 1] }
+    },
+    {
+      "type": "EMPTY", "name": "Pillars",
+      "transform": { "translation": [-6, -2, 0], "rotation": [0, 0, 90], "scaling": [1, 1, 1] },
+      "children": [
+        {
+          "type": "MESH", "name": "Pillar.001",
+          "transform": { "translation": [0, 0, 1], "rotation": [0, 0, 0], "scaling": [0.6, 0.6, 2] },
+          "collider": { "type": "BOX", "center": [0, 0, 0], "size": [1, 1, 1] }
+        },
+        {
+          "type": "MESH", "name": "Pillar.002",
+          "transform": { "translation": [0, 2, 1], "rotation": [0, 0, 0], "scaling": [0.6, 0.6, 2] },
+          "collider": { "type": "BOX", "center": [0, 0, 0], "size": [1, 1, 1] }
+        }
+      ]
+    }
+  ]
+}

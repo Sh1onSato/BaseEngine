@@ -91,7 +91,7 @@ void Object3dCommon::Initialize(DirectXCommon* dxCommon, SrvManager* srvManager)
 }
 
 void Object3dCommon::CreateRootSignature() {
-    D3D12_ROOT_PARAMETER rootParameters[9] = {};
+    D3D12_ROOT_PARAMETER rootParameters[10] = {};
 
     // CBV: Material (b0)
     rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -152,6 +152,12 @@ void Object3dCommon::CreateRootSignature() {
     rootParameters[8].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
     rootParameters[8].Descriptor.ShaderRegister = 2; // t2
     rootParameters[8].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+
+    // SRV: インスタンシング用のインスタンスデータ (t3、StructuredBuffer。Object3dInstanced.VS だけが使う)
+    // 既存のインデックスを変えないよう末尾に追加している。通常の Object3d.VS は読まないので未設定のままでよい
+    rootParameters[kRootIndexInstances].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+    rootParameters[kRootIndexInstances].Descriptor.ShaderRegister = 3; // t3
+    rootParameters[kRootIndexInstances].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
 
     D3D12_ROOT_SIGNATURE_DESC descriptionRootSignature = {};
     descriptionRootSignature.pParameters = rootParameters;
@@ -216,12 +222,25 @@ void Object3dCommon::CreateGraphicsPipeline() {
         dxcUtils.Get(), dxcCompiler.Get(), includeHandler.Get(), std::cout);
     assert(pixelShaderBlob != nullptr);
 
+    instancedVertexShaderBlob = CompileShader(
+        L"resources/shaders/Object3dInstanced.VS.hlsl",
+        L"vs_6_0",
+        dxcUtils.Get(), dxcCompiler.Get(), includeHandler.Get(), std::cout);
+    assert(instancedVertexShaderBlob != nullptr);
+
+    // 通常の Object3d 用と、インスタンシング用（VS だけ違う）
+    BuildMainPipelines(vertexShaderBlob.Get(), pipelineState, pipelineStateAdditive);
+    BuildMainPipelines(instancedVertexShaderBlob.Get(), pipelineStateInstanced, pipelineStateInstancedAdditive);
+}
+
+void Object3dCommon::BuildMainPipelines(IDxcBlob* vertexShader, Microsoft::WRL::ComPtr<ID3D12PipelineState>& outNormal,
+                                        Microsoft::WRL::ComPtr<ID3D12PipelineState>& outAdditive) {
     // --- 2. PSOの設定 ---
     D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
     psoDesc.pRootSignature = rootSignature.Get();
 
     // コンパイルしたシェーダをセット
-    psoDesc.VS = { vertexShaderBlob->GetBufferPointer(), vertexShaderBlob->GetBufferSize() };
+    psoDesc.VS = { vertexShader->GetBufferPointer(), vertexShader->GetBufferSize() };
     psoDesc.PS = { pixelShaderBlob->GetBufferPointer(), pixelShaderBlob->GetBufferSize() };
 
     // InputLayout設定（3D頂点用：POSITION, TEXCOORD, NORMAL, BLENDWEIGHT0, BLENDINDICES0）
@@ -259,7 +278,7 @@ void Object3dCommon::CreateGraphicsPipeline() {
     psoDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
 
     // --- 3. パイプラインステート生成 (有効化) ---
-    HRESULT hr = dxCommon->GetDevice()->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&pipelineState));
+    HRESULT hr = dxCommon->GetDevice()->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&outNormal));
     CheckHResult(hr, "Object3dCommon: CreateGraphicsPipelineState(main)");
 
     // --- 4. 加算合成用パイプラインステート生成（発光表現用） ---
@@ -274,13 +293,13 @@ void Object3dCommon::CreateGraphicsPipeline() {
     // 加算合成は重ね書きが前提のため、深度書き込みは行わない（パーティクルと同じ考え方）
     psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
 
-    hr = dxCommon->GetDevice()->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&pipelineStateAdditive));
+    hr = dxCommon->GetDevice()->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&outAdditive));
     CheckHResult(hr, "Object3dCommon: CreateGraphicsPipelineState(additive)");
 }
 
 void Object3dCommon::CreateShadowRootSignature() {
-    // b0（WVPのみ）・t2（スキニング用ボーン行列パレット）・VSのみの最小ルートシグネチャ
-    D3D12_ROOT_PARAMETER rootParameters[2] = {};
+    // b0（WVP。インスタンシング時はライトのVP）・t2（スキニング用ボーン行列パレット）・t3（インスタンスデータ）・VSのみの最小ルートシグネチャ
+    D3D12_ROOT_PARAMETER rootParameters[3] = {};
     rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
     rootParameters[0].Descriptor.ShaderRegister = 0;
     rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
@@ -288,6 +307,11 @@ void Object3dCommon::CreateShadowRootSignature() {
     rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
     rootParameters[1].Descriptor.ShaderRegister = 2; // t2
     rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+
+    // インスタンシング用（ShadowInstanced.VS だけが使う。末尾に追加）
+    rootParameters[kShadowRootIndexInstances].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+    rootParameters[kShadowRootIndexInstances].Descriptor.ShaderRegister = 3; // t3
+    rootParameters[kShadowRootIndexInstances].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
 
     D3D12_ROOT_SIGNATURE_DESC descriptionRootSignature = {};
     descriptionRootSignature.pParameters = rootParameters;
@@ -318,9 +342,20 @@ void Object3dCommon::CreateShadowPipeline() {
         dxcUtils.Get(), dxcCompiler.Get(), includeHandler.Get(), std::cout);
     assert(shadowVertexShaderBlob != nullptr);
 
+    shadowInstancedVertexShaderBlob = CompileShader(
+        L"resources/shaders/ShadowInstanced.VS.hlsl",
+        L"vs_6_0",
+        dxcUtils.Get(), dxcCompiler.Get(), includeHandler.Get(), std::cout);
+    assert(shadowInstancedVertexShaderBlob != nullptr);
+
+    BuildShadowPipeline(shadowVertexShaderBlob.Get(), pipelineStateShadow);
+    BuildShadowPipeline(shadowInstancedVertexShaderBlob.Get(), pipelineStateShadowInstanced);
+}
+
+void Object3dCommon::BuildShadowPipeline(IDxcBlob* vertexShader, Microsoft::WRL::ComPtr<ID3D12PipelineState>& outPipeline) {
     D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
     psoDesc.pRootSignature = rootSignatureShadow.Get();
-    psoDesc.VS = { shadowVertexShaderBlob->GetBufferPointer(), shadowVertexShaderBlob->GetBufferSize() };
+    psoDesc.VS = { vertexShader->GetBufferPointer(), vertexShader->GetBufferSize() };
     // PSは使用しない（深度のみ書き込む）
 
     // InputLayoutはメインと同じ頂点バッファを使い回すため同一（POSITIONとスキニング属性のみ使用）
@@ -350,12 +385,14 @@ void Object3dCommon::CreateShadowPipeline() {
     psoDesc.NumRenderTargets = 0; // カラーバッファには書き込まない
     psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 
-    HRESULT hr = dxCommon->GetDevice()->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&pipelineStateShadow));
+    HRESULT hr = dxCommon->GetDevice()->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&outPipeline));
     CheckHResult(hr, "Object3dCommon: CreateGraphicsPipelineState(shadow)");
 }
 
 void Object3dCommon::PreDraw(Object3dBlendMode blendMode) {
     auto commandList = dxCommon->GetCommandList();
+    currentBlendMode = blendMode;
+    isShadowPass = false;
 
     // 4. パイプライン設定 ---
     commandList->SetGraphicsRootSignature(rootSignature.Get());
@@ -407,6 +444,7 @@ void Object3dCommon::SetShadowOrthoRange(float lightDistance, float orthoExtent,
 
 void Object3dCommon::PreDrawShadow() {
     UpdateLightViewProjection();
+    isShadowPass = true;
 
     auto commandList = dxCommon->GetCommandList();
 
@@ -458,4 +496,26 @@ void Object3dCommon::PostDrawShadow() {
     // メインのビューポート・シザーに戻す
     commandList->RSSetViewports(1, &dxCommon->GetViewport());
     commandList->RSSetScissorRects(1, &dxCommon->GetScissorRect());
+    isShadowPass = false;
+}
+
+void Object3dCommon::SetInstancedPipeline() {
+    // ルートシグネチャは通常用・影用それぞれと共通なので、PSO だけ差し替える
+    ID3D12PipelineState* pipeline = nullptr;
+    if (isShadowPass) {
+        pipeline = pipelineStateShadowInstanced.Get();
+    } else {
+        pipeline = currentBlendMode == Object3dBlendMode::kAdditive ? pipelineStateInstancedAdditive.Get() : pipelineStateInstanced.Get();
+    }
+    dxCommon->GetCommandList()->SetPipelineState(pipeline);
+}
+
+void Object3dCommon::RestorePipeline() {
+    ID3D12PipelineState* pipeline = nullptr;
+    if (isShadowPass) {
+        pipeline = pipelineStateShadow.Get();
+    } else {
+        pipeline = currentBlendMode == Object3dBlendMode::kAdditive ? pipelineStateAdditive.Get() : pipelineState.Get();
+    }
+    dxCommon->GetCommandList()->SetPipelineState(pipeline);
 }

@@ -17,6 +17,7 @@ void BitmapText::Initialize(SpriteCommon* spriteCommon, size_t maxChars) {
         sprite->SetTexSize({ kGlyphCellWidth, kGlyphCellHeight });
         sprite->SetSize({ kGlyphCellWidth * scale, kGlyphCellHeight * scale });
         sprite->SetColor(color);
+        sprite->SetLayer(layer);
         charSprites.push_back(std::move(sprite));
     }
 }
@@ -55,6 +56,13 @@ void BitmapText::SetColor(const Vector4& newColor) {
     color = newColor;
     for (auto& sprite : charSprites) {
         sprite->SetColor(color);
+    }
+}
+
+void BitmapText::SetLayer(int newLayer) {
+    layer = newLayer;
+    for (auto& sprite : charSprites) {
+        sprite->SetLayer(layer);
     }
 }
 

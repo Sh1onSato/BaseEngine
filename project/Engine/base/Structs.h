@@ -96,6 +96,20 @@ struct TransformationMatrix {
 	Matrix4x4 World;
 };
 
+// --- スプライト専用（Sprite.VS.hlsl / Sprite.PS.hlsl と対応） ---
+struct SpriteVertex {
+	Vector4 position;
+	Vector2 texcoord;
+};
+
+struct SpriteMaterial {
+	Vector4 color;
+	Matrix4x4 uvTransform;
+	int32_t usePointFilter; // 0: リニア補間 / 1: ポイント(ニアレスト)
+	float padding[3];
+};
+static_assert(sizeof(SpriteMaterial) == 96);
+
 struct DirectionalLight {
 	Vector4 color;
 	Vector3 direction;

@@ -2,19 +2,45 @@
 #include"DirectXCommon.h"
 #include"ShaderCompiler.h"
 #include"SrvManager.h"
+#include"SpriteBlendMode.h"
+#include <vector>
+#include <cstdint>
 
+class Sprite;
+class Camera2D;
+
+// スプライト共通部
+// 【描画の流れ（レイヤー対応）】
+// ・Sprite::Draw は描画キューに積むだけ。シーンの Draw が終わると SceneManager が Flush する。
+// ・Flush ではレイヤーの小さい順（同じレイヤー内は Draw を呼んだ順）に描画される。
+// ・3Dより奥に出したいSpriteは、それを Draw した後に spriteCommon->Flush() を呼んでから3Dを描く。
+// ・同じSpriteを1フレームに2回Drawしても定数バッファは1つなので、
+//   最後のUpdateの位置で2回描かれる（今までと同じ制限）。
 class SpriteCommon {
 public:
 	// 初期化
 	void Initialize(DirectXCommon* dxCommon, SrvManager* srvManager);
 
-	// 描画前処理
+	// 描画前処理（ブレンドモードはkNormalにリセットされる）
+	// ※ Flush 内で自動的に呼ばれるので、通常は呼ばなくてよい（呼んでも害はない）
 	void PreDraw();
+
+	// 描画キューに積む（Sprite::Draw から呼ばれる）
+	void Enqueue(Sprite* sprite, uint32_t srvIndex);
+	// 積まれたスプライトをレイヤー順に描画してキューを空にする
+	void Flush();
+
+	// ブレンドモードを切り替える（現在と同じなら何もしない）
+	void SetBlendMode(SpriteBlendMode mode);
+
+	// 2Dカメラをセットする（所有しない。nullptrでカメラなし）
+	// SetUseCamera(true) のSpriteだけが影響を受ける。
+	// ※ カメラを持つシーンが破棄される前に必ず nullptr に戻すこと（ダングリング防止）
+	void SetCamera2D(Camera2D* camera) { camera2D = camera; }
+	Camera2D* GetCamera2D() const { return camera2D; }
 
 	// ゲッター
 	DirectXCommon* GetDxCommon() const { return dxCommon; }
-	IDxcBlob* GetVertexShaderBlob() const { return vertexShaderBlob.Get(); }
-	IDxcBlob* GetPixelShaderBlob() const { return pixelShaderBlob.Get(); }
 	// 画像番号を渡すと、その「住所(Handle)」を返してくれる関数を作る
 	D3D12_GPU_DESCRIPTOR_HANDLE GetTextureHandle(uint32_t index) {
 		return srvManager->GetGPUDescriptorHandle(index);
@@ -22,6 +48,8 @@ public:
 private:
 	DirectXCommon* dxCommon = nullptr;
 	SrvManager* srvManager = nullptr;
+	// 2Dカメラ（所有しない）
+	Camera2D* camera2D = nullptr;
 
 	Microsoft::WRL::ComPtr <IDxcUtils> dxcUtils = nullptr;
 	Microsoft::WRL::ComPtr <IDxcCompiler3> dxcCompiler = nullptr;
@@ -29,27 +57,37 @@ private:
 
 	// RootSignatureを作るための専用関数
 	void CreateRootSignature();
+	// 指定ブレンドモードのPSOを生成する
+	void CreatePipelineState(SpriteBlendMode mode);
+	// ブレンドモードに対応するブレンド設定を返す
+	static D3D12_RENDER_TARGET_BLEND_DESC MakeBlendDesc(SpriteBlendMode mode);
+
 	// メンバ変数として保持する
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature = nullptr;
 
-	// InputLayoutの設定（Object3d.VS/PS.hlslを使い回すため、スキニング属性(BLENDWEIGHT0/BLENDINDICES0)も追従させる）
-	D3D12_INPUT_ELEMENT_DESC inputElementDescs[5] = { };
+	// InputLayoutの設定（Sprite.VS.hlsl: POSITION0 / TEXCOORD0）
+	D3D12_INPUT_ELEMENT_DESC inputElementDescs[2] = { };
 	D3D12_INPUT_LAYOUT_DESC inputLayoutDesc{};
-	// BlendStateの設定
-	D3D12_BLEND_DESC blendDesc{};
-	// RasiterzerStateの設定
-	D3D12_RASTERIZER_DESC rasterizerDesc{};
-	// GraphicsPipelineStateの設定
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC graphicsPipelineStateDesc{};
-	// DepthStencilStateの設定
-	D3D12_DEPTH_STENCIL_DESC depthStencilDesc{};
-	// 実際のパイプラインステート
-	Microsoft::WRL::ComPtr <ID3D12PipelineState> graphicsPipelineState = nullptr;
+
+	// ブレンドモードごとのパイプラインステート
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineStates[kSpriteBlendModeCount];
+	// 現在コマンドリストにセットしているブレンドモード
+	SpriteBlendMode currentBlendMode = SpriteBlendMode::kNormal;
 
 	Microsoft::WRL::ComPtr <IDxcBlob> vertexShaderBlob = nullptr;
-	Microsoft::WRL::ComPtr < IDxcBlob> pixelShaderBlob = nullptr;
+	Microsoft::WRL::ComPtr <IDxcBlob> pixelShaderBlob = nullptr;
 
-	// Object3d.VS.hlslのt2(gSkinMatrices)向けダミーパレット（単位行列1個）。
-	// Spriteは常にこれをバインドすることで実質ノーオペレーションのスキニングになる。
-	Microsoft::WRL::ComPtr<ID3D12Resource> defaultBonePaletteResource = nullptr;
+	// 描画キューの1要素
+	struct DrawRequest {
+		Sprite* sprite;    // 描画するスプライト
+		uint32_t srvIndex; // 使うテクスチャのSRVインデックス
+		int layer;         // 積んだ時点のレイヤー
+		uint32_t order;    // 積んだ順番（デバッグ用）
+	};
+	// 描画キュー
+	std::vector<DrawRequest> drawQueue;
+	// 積んだ順番のカウンタ（Flushでリセット）
+	uint32_t drawOrderCounter = 0;
+	// 初期確保するキューの容量
+	static constexpr size_t kInitialQueueCapacity = 256;
 };

@@ -31,6 +31,9 @@ public:
     // isOpen=falseの間もバー自体は最新値に追従させるが、キー入力の受付はisOpen中のみ
     void Update(Input* input, bool isOpen);
     void Draw();
+    // メニュー全体（背景・バー・数値・カーソル）の描画レイヤーをまとめて設定する（Initializeの後に呼ぶ）。
+    // 同じレイヤー内はDrawの呼び出し順で重なるので、メニュー内の前後関係は今まで通り
+    void SetLayer(int layer);
 
 private:
     struct Row {

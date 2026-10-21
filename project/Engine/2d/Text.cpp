@@ -62,6 +62,7 @@ void Text::SetPosition(const Vector2& position) { sprite->SetPosition(position);
 void Text::SetAnchorPoint(const Vector2& anchor) { sprite->SetAnchorPoint(anchor); }
 void Text::SetColor(const Vector4& color) { sprite->SetColor(color); }
 void Text::SetRotation(float rotation) { sprite->SetRotation(rotation); }
+void Text::SetLayer(int layer) { sprite->SetLayer(layer); }
 
 void Text::SetScale(float newScale) {
     scale = newScale;

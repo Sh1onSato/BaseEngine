@@ -18,6 +18,8 @@ public:
     void SetText(const std::string& text);
     void SetPosition(const Vector2& pos);
     void SetColor(const Vector4& color);
+    // 描画レイヤー（大きいほど手前。Initialize前に呼んでも反映される）
+    void SetLayer(int layer);
 
     void Update();
     void Draw();
@@ -35,6 +37,7 @@ private:
     std::vector<std::unique_ptr<Sprite>> charSprites; // maxChars分を事前生成しておくプール
     Vector2 position{ 0.0f, 0.0f };
     Vector4 color{ 1.0f, 1.0f, 1.0f, 1.0f };
+    int layer = 0;           // 全文字スプライトに適用する描画レイヤー
     float scale = 2.0f;      // 1グリフあたりの表示倍率
     size_t visibleCount = 0; // 直近のSetTextで実際に使われた文字数（この数だけUpdate/Drawする）
 };

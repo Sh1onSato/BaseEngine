@@ -108,3 +108,14 @@ void SettingsMenu::Draw() {
         cursor->Draw();
     }
 }
+
+void SettingsMenu::SetLayer(int layer) {
+    for (auto& row : rows) {
+        if (row.background) { row.background->SetLayer(layer); }
+        if (row.fill) { row.fill->SetLayer(layer); }
+        row.valueText.SetLayer(layer);
+    }
+    if (cursor) {
+        cursor->SetLayer(layer);
+    }
+}
