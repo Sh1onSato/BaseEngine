@@ -1,5 +1,8 @@
 #include "AudioManager.h"
 #include "AudioCommon.h"
+#include "Calculation.h"
+#include "Camera.h"
+#include "CameraManager.h"
 #include "Logger.h"
 #include <algorithm>
 #include <cassert>
@@ -34,6 +37,14 @@ void AudioManager::Initialize() {
         categoryVoices[i]->SetVolume(categoryVolumes[i]);
     }
     AudioCommon::GetInstance()->GetMasteringVoice()->SetVolume(masterVolume);
+
+    // 3D の音の計算（X3DAudio）。スピーカーの並び（ステレオ・5.1 など）はマスターに合わせる
+    outputChannels = masterDetails.InputChannels;
+    DWORD channelMask = 0;
+    HRESULT hr = AudioCommon::GetInstance()->GetMasteringVoice()->GetChannelMask(&channelMask);
+    Logger::CheckHResult(hr, "AudioManager: GetChannelMask");
+    hr = X3DAudioInitialize(channelMask, X3DAUDIO_SPEED_OF_SOUND, x3dAudio);
+    Logger::CheckHResult(hr, "AudioManager: X3DAudioInitialize");
 }
 
 void AudioManager::Finalize() {
@@ -63,8 +74,16 @@ void AudioManager::Finalize() {
 }
 
 void AudioManager::Update(float deltaTime) {
+    if (isListenerFollowingCamera) {
+        UpdateListenerFromCamera();
+    }
     for (auto it = voices.begin(); it != voices.end(); ) {
         PlayingVoice& voice = it->second;
+
+        // 3D の音は、リスナーや音の位置が動くので毎フレーム左右・距離の音量を計算し直す
+        if (voice.is3D && voice.sourceVoice) {
+            Apply3D(voice);
+        }
 
         // フェード処理
         if (voice.fadeDuration > 0.0f && !voice.isPaused) {
@@ -184,8 +203,166 @@ SoundHandle AudioManager::Play(const std::string& name, bool loop, float volume,
     voice.sourceVoice = sourceVoice;
     voice.soundName = name;
     voice.volume = volume;
+    voice.category = category;
+    voice.sourceChannels = (std::max)(1u, static_cast<uint32_t>(soundData.wfex.nChannels));
     voices.emplace(handle, voice);
     return handle;
+}
+
+SoundHandle AudioManager::Play3D(const std::string& name, const Vector3& position, bool loop, float volume,
+                                 float minDistance, float maxDistance, AudioCategory category) {
+    const SoundHandle handle = Play(name, loop, volume, category);
+    if (PlayingVoice* voice = FindVoice(handle)) {
+        voice->is3D = true;
+        voice->position = position;
+        voice->minDistance = minDistance;
+        voice->maxDistance = maxDistance;
+        // 鳴り始めから正しい左右・音量にする（次の Update を待たない）
+        Apply3D(*voice);
+    }
+    return handle;
+}
+
+void AudioManager::SetSoundPosition(SoundHandle handle, const Vector3& position) {
+    PlayingVoice* voice = FindVoice(handle);
+    if (voice && voice->sourceVoice && voice->is3D) {
+        voice->position = position;
+        Apply3D(*voice);
+    }
+}
+
+void AudioManager::SetSoundRange(SoundHandle handle, float minDistance, float maxDistance) {
+    PlayingVoice* voice = FindVoice(handle);
+    if (voice && voice->sourceVoice && voice->is3D) {
+        voice->minDistance = minDistance;
+        voice->maxDistance = maxDistance;
+        Apply3D(*voice);
+    }
+}
+
+void AudioManager::SetPan(SoundHandle handle, float pan) {
+    PlayingVoice* voice = FindVoice(handle);
+    if (voice && voice->sourceVoice && !voice->is3D) {
+        voice->hasPan = true;
+        voice->pan = (std::clamp)(pan, -1.0f, 1.0f);
+        ApplyPan(*voice);
+    }
+}
+
+void AudioManager::SetListener(const Vector3& position, const Vector3& forward, const Vector3& up) {
+    isListenerFollowingCamera = false;
+    listenerPosition = position;
+    // X3DAudio は前と上が直角・長さ 1 でないと正しく計算できないので整える
+    listenerForward = Calculation::Normalize(forward);
+    listenerUp = Calculation::Normalize(up - listenerForward * Calculation::Dot(up, listenerForward));
+}
+
+bool AudioManager::GetOutputGains(SoundHandle handle, float& outLeft, float& outRight) const {
+    const PlayingVoice* voice = FindVoice(handle);
+    if (!voice || !voice->sourceVoice || (!voice->is3D && !voice->hasPan)) {
+        return false;
+    }
+    outLeft = voice->leftGain;
+    outRight = voice->rightGain;
+    return true;
+}
+
+void AudioManager::UpdateListenerFromCamera() {
+    const Camera* camera = CameraManager::GetInstance()->GetActiveCamera();
+    if (!camera) {
+        return;
+    }
+    // カメラのワールド行列の行（Camera::Update と同じ作り方）: 1行目が上、2行目が前
+    const Transform& transform = camera->GetTransform();
+    const Matrix4x4 world = Calculation::MakeAffineMatrix({ 1.0f, 1.0f, 1.0f }, transform.rotate, transform.translate);
+    listenerPosition = transform.translate;
+    listenerUp = Calculation::Normalize(Vector3{ world.m[1][0], world.m[1][1], world.m[1][2] });
+    listenerForward = Calculation::Normalize(Vector3{ world.m[2][0], world.m[2][1], world.m[2][2] });
+}
+
+void AudioManager::Apply3D(PlayingVoice& voice) {
+    const uint32_t sourceChannels = (std::min)(voice.sourceChannels, kMaxMatrixChannels);
+    const uint32_t destinationChannels = (std::min)(outputChannels, kMaxMatrixChannels);
+
+    X3DAUDIO_LISTENER listener{};
+    listener.Position = { listenerPosition.x, listenerPosition.y, listenerPosition.z };
+    listener.OrientFront = { listenerForward.x, listenerForward.y, listenerForward.z };
+    listener.OrientTop = { listenerUp.x, listenerUp.y, listenerUp.z };
+
+    // 距離の音量: minDistance までは 1、maxDistance で 0 へ真っすぐ下がる（距離は maxDistance で割った 0〜1 で表す）
+    const float maxDistance = (std::max)(voice.maxDistance, 1.0e-3f);
+    const float innerRatio = std::clamp(voice.minDistance / maxDistance, 0.0f, 0.999f);
+    X3DAUDIO_DISTANCE_CURVE_POINT points[3] = { { 0.0f, 1.0f }, { innerRatio, 1.0f }, { 1.0f, 0.0f } };
+    X3DAUDIO_DISTANCE_CURVE curve{};
+    // minDistance が 0 なら最初の2点が同じ距離になるので、2点だけにする
+    curve.pPoints = innerRatio > 0.0f ? points : points + 1;
+    curve.PointCount = innerRatio > 0.0f ? 3 : 2;
+    if (innerRatio <= 0.0f) {
+        points[1].Distance = 0.0f;
+    }
+
+    float azimuths[kMaxMatrixChannels] = {};
+    X3DAUDIO_EMITTER emitter{};
+    emitter.Position = { voice.position.x, voice.position.y, voice.position.z };
+    emitter.OrientFront = { 0.0f, 0.0f, 1.0f };
+    emitter.OrientTop = { 0.0f, 1.0f, 0.0f };
+    emitter.ChannelCount = sourceChannels;
+    emitter.pChannelAzimuths = azimuths; // ステレオの音も1点から鳴らす
+    emitter.CurveDistanceScaler = maxDistance;
+    emitter.pVolumeCurve = &curve;
+
+    float matrix[kMaxMatrixChannels * kMaxMatrixChannels] = {};
+    X3DAUDIO_DSP_SETTINGS dsp{};
+    dsp.SrcChannelCount = sourceChannels;
+    dsp.DstChannelCount = destinationChannels;
+    dsp.pMatrixCoefficients = matrix;
+    X3DAudioCalculate(x3dAudio, &listener, &emitter, X3DAUDIO_CALCULATE_MATRIX, &dsp);
+    SetOutputMatrix(voice, matrix);
+}
+
+void AudioManager::ApplyPan(PlayingVoice& voice) {
+    const uint32_t sourceChannels = (std::min)(voice.sourceChannels, kMaxMatrixChannels);
+    const uint32_t destinationChannels = (std::min)(outputChannels, kMaxMatrixChannels);
+    float matrix[kMaxMatrixChannels * kMaxMatrixChannels] = {};
+    // 出力 D・入力 S の音量は matrix[入力の数 * D + S]（XAudio2 の並び）
+    if (destinationChannels < 2) {
+        for (uint32_t s = 0; s < sourceChannels; ++s) {
+            matrix[s] = 1.0f;
+        }
+    } else {
+        // 真ん中で左右とも 1、片側へ寄せるほど反対側を小さくする
+        const float leftGain = (std::min)(1.0f, 1.0f - voice.pan);
+        const float rightGain = (std::min)(1.0f, 1.0f + voice.pan);
+        if (sourceChannels == 1) {
+            matrix[0] = leftGain;
+            matrix[1] = rightGain;
+        } else {
+            // ステレオ以上の音: 左は左へ、右は右へ（3つ目以降のチャンネルは同じ番号の出力へそのまま）
+            for (uint32_t s = 0; s < sourceChannels && s < destinationChannels; ++s) {
+                const float gain = s == 0 ? leftGain : (s == 1 ? rightGain : 1.0f);
+                matrix[sourceChannels * s + s] = gain;
+            }
+        }
+    }
+    SetOutputMatrix(voice, matrix);
+}
+
+void AudioManager::SetOutputMatrix(PlayingVoice& voice, const float* matrix) {
+    const uint32_t sourceChannels = (std::min)(voice.sourceChannels, kMaxMatrixChannels);
+    const uint32_t destinationChannels = (std::min)(outputChannels, kMaxMatrixChannels);
+    voice.sourceVoice->SetOutputMatrix(categoryVoices[static_cast<size_t>(voice.category)], sourceChannels, destinationChannels, matrix);
+    // 確認表示用: 左（出力 0）と右（出力 1）に一番大きく入っている音量
+    voice.leftGain = 0.0f;
+    voice.rightGain = 0.0f;
+    for (uint32_t s = 0; s < sourceChannels; ++s) {
+        voice.leftGain = (std::max)(voice.leftGain, matrix[s]);
+        if (destinationChannels >= 2) {
+            voice.rightGain = (std::max)(voice.rightGain, matrix[sourceChannels + s]);
+        }
+    }
+    if (destinationChannels < 2) {
+        voice.rightGain = voice.leftGain;
+    }
 }
 
 SoundHandle AudioManager::PlayBGM(const std::string& name, float volume, float fadeInSeconds) {

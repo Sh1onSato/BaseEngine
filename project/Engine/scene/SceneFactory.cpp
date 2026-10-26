@@ -11,6 +11,7 @@
 #include "TiledTestScene.h"
 #include "PostProcessTestScene.h"
 #include "PathfindTestScene.h"
+#include "Sound3DTestScene.h"
 #include "Logger.h"
 #include <format>
 
@@ -64,6 +65,10 @@ BaseScene* SceneFactory::CreateScene(const std::string& sceneName) {
     else if (sceneName == "PATHFIND_TEST") {
         // 経路探索（NavGrid・A*・PathFollower）の検証用シーン
         newScene = new PathfindTestScene();
+    }
+    else if (sceneName == "SOUND3D_TEST") {
+        // 3D の音（Play3D・リスナー・SetPan）の検証用シーン
+        newScene = new Sound3DTestScene();
     }
     else {
         // 該当なしの場合は無言でnullptrを返すと「シーンが何も更新・描画されない」という
