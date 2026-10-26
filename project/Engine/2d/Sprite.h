@@ -3,12 +3,13 @@
 #include"SpriteBlendMode.h"
 #include "WinApp.h"
 #include "TextureManager.h"
+#include "SpriteDrawable.h"
 #include <d3d12.h>
 #include <wrl.h>
 class SpriteCommon;
 class DirectXCommon;
 
-class Sprite {
+class Sprite : public SpriteDrawable {
 public:
 	// テクスチャのサンプリング方法
 	enum class TextureFilter {
@@ -28,7 +29,7 @@ public:
 
 	// 実際に描画コマンドを積む。SpriteCommon::Flush から呼ばれる。ゲーム側は Draw() を使う
 	// （ここでカメラ込みのWVPを計算して定数バッファに書き込む）
-	void RecordDrawCommand(uint32_t srvIndex);
+	void RecordDrawCommand(uint32_t srvIndex) override;
 
 	void ImGui(); // デバッグ用UIを表示する関数を追加
 	// --- 外部から数値を取得するための関数 (Getter) ---
@@ -38,7 +39,7 @@ public:
 	const Vector2& GetTexLeftTop() const { return texLeftTop; }
 	const Vector2& GetTexSize() const { return texSize; }
 	SpriteBlendMode GetBlendMode() const { return blendMode; }
-	int GetLayer() const { return layer; }
+	int GetLayer() const override { return layer; }
 	bool GetUseCamera() const { return useCamera; }
 	TextureFilter GetTextureFilter() const {
 		return materialData->usePointFilter != 0 ? TextureFilter::kPoint : TextureFilter::kLinear;

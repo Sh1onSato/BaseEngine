@@ -47,6 +47,8 @@ public:
     virtual void Update() {}
     // 毎フレーム呼ばれる（非アクティブ・Destroy済みのときは呼ばれない）
     virtual void Draw() {}
+    // 影を描く（GameObjectManager::DrawShadow から、Object3dCommon::PreDrawShadow 〜 PostDrawShadow の間に呼ばれる）
+    virtual void DrawShadow(const Matrix4x4& /*lightViewProjection*/) {}
     // マネージャーから取り除かれる直前に1回だけ呼ばれる（後片付け用）
     virtual void Finalize() {}
     // レベルデータ（LevelSpawner）から作られたとき、Initialize の後に1回だけ呼ばれる。

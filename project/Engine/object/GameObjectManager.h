@@ -1,6 +1,7 @@
 #pragma once
 #include "CollisionManager.h"
 #include "GameObject.h"
+#include "ModelBatcher.h"
 #include <memory>
 #include <string>
 #include <type_traits>
@@ -41,6 +42,16 @@ public:
     void Update();
     // 毎フレーム1回、シーンの Draw から呼ぶ
     void Draw();
+    // 影を描く（シーンが Object3dCommon::PreDrawShadow と PostDrawShadow の間で呼ぶ）。有効な物すべての DrawShadow を呼ぶ
+    void DrawShadow(const Matrix4x4& lightViewProjection);
+
+    // --- ModelObject の自動まとめ描き ---
+    // Draw / DrawShadow の中で、同じモデルの ModelObject を1回の描画命令にまとめて描く（既定 true）。
+    // 見た目は同じ。物ごとに外したいときは ModelObject::SetBatchingEnabled(false)
+    void SetAutoBatching(bool enabled) { isAutoBatching = enabled; }
+    bool IsAutoBatching() const { return isAutoBatching; }
+    ModelBatcher& GetModelBatcher() { return modelBatcher; }
+    const ModelBatcher& GetModelBatcher() const { return modelBatcher; }
 
     // 名前が一致する最初の物（見つからなければ nullptr）
     GameObject* Find(const std::string& name) const;
@@ -117,6 +128,10 @@ private:
     std::vector<std::pair<GameObject*, Vector3>> savedPhysicsPositions;
     // BeginRenderInterpolation の入れ子の深さ（シーンの Begin〜End の中で Draw が呼ばれても二重に入れ替えない）
     int renderInterpolationDepth = 0;
+
+    // ModelObject の自動まとめ描き
+    ModelBatcher modelBatcher;
+    bool isAutoBatching = true;
 };
 
 template<class T, class... Args>

@@ -288,6 +288,9 @@
     <ClCompile Include="Engine\object\ModelObject.cpp">
       <Filter>ソース ファイル\engine\object</Filter>
     </ClCompile>
+    <ClCompile Include="Engine\object\ModelBatcher.cpp">
+      <Filter>ソース ファイル\engine\object</Filter>
+    </ClCompile>
     <ClCompile Include="Engine\object\Rigidbody.cpp">
       <Filter>ソース ファイル\engine\object</Filter>
     </ClCompile>
@@ -611,6 +614,9 @@
       <Filter>ヘッダー ファイル\engine\object</Filter>
     </ClInclude>
     <ClInclude Include="Engine\object\ModelObject.h">
+      <Filter>ヘッダー ファイル\engine\object</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\object\ModelBatcher.h">
       <Filter>ヘッダー ファイル\engine\object</Filter>
     </ClInclude>
     <ClInclude Include="Engine\object\Rigidbody.h">

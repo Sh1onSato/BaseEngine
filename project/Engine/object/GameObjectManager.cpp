@@ -46,11 +46,32 @@ void GameObjectManager::Draw() {
     BeginRenderInterpolation();
     // Draw 中に Create されても objects が増えないよう、Update と同じく一時置き場を使わせる
     isUpdating = true;
+    // ModelObject は描かずにまとめ役へ預け、最後に同じモデルごとまとめて描く
+    if (isAutoBatching) {
+        modelBatcher.Begin(false);
+    }
     for (const std::unique_ptr<GameObject>& object : objects) {
         if (object->IsActive() && !object->IsDestroyed()) {
             object->Draw();
         }
     }
+    modelBatcher.Flush();
+    isUpdating = false;
+    EndRenderInterpolation();
+}
+
+void GameObjectManager::DrawShadow(const Matrix4x4& lightViewProjection) {
+    BeginRenderInterpolation();
+    isUpdating = true;
+    if (isAutoBatching) {
+        modelBatcher.Begin(true);
+    }
+    for (const std::unique_ptr<GameObject>& object : objects) {
+        if (object->IsActive() && !object->IsDestroyed()) {
+            object->DrawShadow(lightViewProjection);
+        }
+    }
+    modelBatcher.Flush();
     isUpdating = false;
     EndRenderInterpolation();
 }

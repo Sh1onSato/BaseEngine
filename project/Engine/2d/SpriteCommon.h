@@ -7,6 +7,7 @@
 #include <cstdint>
 
 class Sprite;
+class SpriteDrawable;
 class Camera2D;
 struct Rect;
 
@@ -26,8 +27,8 @@ public:
 	// ※ Flush 内で自動的に呼ばれるので、通常は呼ばなくてよい（呼んでも害はない）
 	void PreDraw();
 
-	// 描画キューに積む（Sprite::Draw から呼ばれる）
-	void Enqueue(Sprite* sprite, uint32_t srvIndex);
+	// 描画キューに積む（Sprite::Draw・TileMap::Draw から呼ばれる）
+	void Enqueue(SpriteDrawable* drawable, uint32_t srvIndex);
 	// 積まれたスプライトをレイヤー順に描画してキューを空にする
 	void Flush();
 
@@ -93,7 +94,7 @@ private:
 	};
 	// 描画キューの1要素
 	struct DrawRequest {
-		Sprite* sprite;    // 描画するスプライト
+		SpriteDrawable* sprite; // 描画する物（スプライト・タイルマップのレイヤー）
 		uint32_t srvIndex; // 使うテクスチャのSRVインデックス
 		int layer;         // 積んだ時点のレイヤー
 		uint32_t order;    // 積んだ順番（デバッグ用）

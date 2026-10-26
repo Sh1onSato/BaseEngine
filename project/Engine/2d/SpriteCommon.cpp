@@ -211,7 +211,7 @@ void SpriteCommon::SetBlendMode(SpriteBlendMode mode) {
 	currentBlendMode = mode;
 }
 
-void SpriteCommon::Enqueue(Sprite* sprite, uint32_t srvIndex) {
+void SpriteCommon::Enqueue(SpriteDrawable* sprite, uint32_t srvIndex) {
 	if (sprite == nullptr) {
 		return;
 	}

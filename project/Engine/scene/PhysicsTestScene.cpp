@@ -358,12 +358,8 @@ void PhysicsTestScene::Draw() {
 void PhysicsTestScene::DrawShadowPass() {
     Object3dCommon* object3dCommon = Framework::GetInstance()->GetObject3dCommon();
     object3dCommon->PreDrawShadow();
-    const Matrix4x4 lightViewProjection = object3dCommon->GetLightViewProjection();
-    for (ModelObject* model : objects.FindAllByType<ModelObject>()) {
-        if (model->IsActive()) {
-            model->DrawShadow(lightViewProjection);
-        }
-    }
+    // 有効な物すべての影（ModelObject は同じモデルどうしまとめて描かれる）
+    objects.DrawShadow(object3dCommon->GetLightViewProjection());
     object3dCommon->PostDrawShadow();
 }
 

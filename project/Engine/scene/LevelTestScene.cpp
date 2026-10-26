@@ -129,7 +129,7 @@ void LevelTestScene::InitializeTexts() {
     helpText = std::make_unique<Text>();
     helpText->Initialize(spriteCommon, 20.0f);
     helpText->SetText(
-        "[←↑↓→] 移動  [F5] JSON を読み直す\n"
+        "[←↑↓→] 移動  [F5] JSON を読み直す  [B] まとめ描き ON / OFF\n"
         "黄=コイン(class) 青=プレイヤー(名前で選択)\n"
         "柱2本=親子 / 白い立方体=モデルが見つからない物\n"
         "ログ（出力ウィンドウ）に LevelSpawner の警告が出る");
@@ -151,6 +151,10 @@ void LevelTestScene::Finalize() {
 void LevelTestScene::Update() {
     if (Framework::GetInstance()->GetInput()->TriggerKey(DIK_F5)) {
         ReloadLevel();
+    }
+    // [B] ModelObject の自動まとめ描き ON / OFF（見た目が変わらないことの確認用）
+    if (Framework::GetInstance()->GetInput()->TriggerKey(DIK_B)) {
+        objects.SetAutoBatching(!objects.IsAutoBatching());
     }
 
     objects.Update();
@@ -198,12 +202,8 @@ void LevelTestScene::Draw() {
 void LevelTestScene::DrawShadowPass() {
     Object3dCommon* object3dCommon = Framework::GetInstance()->GetObject3dCommon();
     object3dCommon->PreDrawShadow();
-    Matrix4x4 lightViewProjection = object3dCommon->GetLightViewProjection();
-    for (ModelObject* model : objects.FindAllByType<ModelObject>()) {
-        if (model->IsActive()) {
-            model->DrawShadow(lightViewProjection);
-        }
-    }
+    // 有効な物すべての影（ModelObject は同じモデルどうしまとめて描かれる）
+    objects.DrawShadow(object3dCommon->GetLightViewProjection());
     object3dCommon->PostDrawShadow();
 }
 
@@ -223,11 +223,16 @@ std::string LevelTestScene::BuildStatusText() const {
         "スコア: {}\n"
         "disabled の物(Hidden): {}\n"
         "CAMERA(Camera): {}\n"
-        "読み直し: {}",
+        "読み直し: {}\n"
+        "まとめ描き: {}",
         spawnedCount,
         objects.FindAllByTag(kCoinTag).size(),
         player ? player->GetScore() : 0,
         hidden ? "作られた(NG)" : "作られていない(OK)",
         camera3d ? "作られた(NG)" : "作られていない(OK)",
-        reloadMessage);
+        reloadMessage,
+        objects.IsAutoBatching()
+            ? std::format("ON（{} 個を {} 回の描画命令で）", objects.GetModelBatcher().GetLastObjectCount(),
+                          objects.GetModelBatcher().GetLastDrawCallCount())
+            : std::string("OFF（1個ずつ描く）"));
 }

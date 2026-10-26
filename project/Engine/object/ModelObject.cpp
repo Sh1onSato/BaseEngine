@@ -1,5 +1,6 @@
 #include "ModelObject.h"
 #include "Framework.h"
+#include "GameObjectManager.h"
 #include "Model.h"
 #include "Object3d.h"
 
@@ -35,8 +36,21 @@ void ModelObject::SyncObject3d() {
     object3d->Update();
 }
 
+ModelBatcher* ModelObject::GetActiveBatcher() const {
+    // GameObjectManager の Draw / DrawShadow の中から呼ばれたときだけまとめる（シーンが直接呼んだときはその場で描く）
+    if (!isBatchingEnabled || !GetManager()) {
+        return nullptr;
+    }
+    ModelBatcher& batcher = GetManager()->GetModelBatcher();
+    return batcher.IsActive() ? &batcher : nullptr;
+}
+
 void ModelObject::Draw() {
     if (!model) {
+        return;
+    }
+    if (ModelBatcher* batcher = GetActiveBatcher()) {
+        batcher->Add(model, transform, color);
         return;
     }
     SyncObject3d();
@@ -45,6 +59,10 @@ void ModelObject::Draw() {
 
 void ModelObject::DrawShadow(const Matrix4x4& lightViewProjection) {
     if (!model) {
+        return;
+    }
+    if (ModelBatcher* batcher = GetActiveBatcher()) {
+        batcher->Add(model, transform, color);
         return;
     }
     // シャドウパスは通常の Draw より先なので、ここで先に最新の位置を反映しておく
