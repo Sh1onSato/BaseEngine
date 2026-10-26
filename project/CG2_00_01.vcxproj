@@ -83,7 +83,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <TreatWarningAsError>true</TreatWarningAsError>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)Engine\2d;$(ProjectDir)Engine\3d;$(ProjectDir)Engine\audio;$(ProjectDir)Engine\base;$(ProjectDir)Engine\input;$(ProjectDir)Engine\math;$(ProjectDir)Engine\object;$(ProjectDir)Engine\scene;$(ProjectDir)Engine\ui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)Engine\2d;$(ProjectDir)Engine\ai;$(ProjectDir)Engine\3d;$(ProjectDir)Engine\audio;$(ProjectDir)Engine\base;$(ProjectDir)Engine\input;$(ProjectDir)Engine\math;$(ProjectDir)Engine\object;$(ProjectDir)Engine\scene;$(ProjectDir)Engine\ui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
     </ClCompile>
     <Link>
@@ -111,7 +111,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)Engine\2d;$(ProjectDir)Engine\3d;$(ProjectDir)Engine\audio;$(ProjectDir)Engine\base;$(ProjectDir)Engine\input;$(ProjectDir)Engine\math;$(ProjectDir)Engine\object;$(ProjectDir)Engine\scene;$(ProjectDir)Engine\ui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)Engine\2d;$(ProjectDir)Engine\ai;$(ProjectDir)Engine\3d;$(ProjectDir)Engine\audio;$(ProjectDir)Engine\base;$(ProjectDir)Engine\input;$(ProjectDir)Engine\math;$(ProjectDir)Engine\object;$(ProjectDir)Engine\scene;$(ProjectDir)Engine\ui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -140,7 +140,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <Optimization>Disabled</Optimization>
       <WholeProgramOptimization>false</WholeProgramOptimization>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)Engine\2d;$(ProjectDir)Engine\3d;$(ProjectDir)Engine\audio;$(ProjectDir)Engine\base;$(ProjectDir)Engine\input;$(ProjectDir)Engine\math;$(ProjectDir)Engine\object;$(ProjectDir)Engine\scene;$(ProjectDir)Engine\ui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)Engine\2d;$(ProjectDir)Engine\ai;$(ProjectDir)Engine\3d;$(ProjectDir)Engine\audio;$(ProjectDir)Engine\base;$(ProjectDir)Engine\input;$(ProjectDir)Engine\math;$(ProjectDir)Engine\object;$(ProjectDir)Engine\scene;$(ProjectDir)Engine\ui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -198,6 +198,9 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="Engine\2d\TileMap.cpp" />
     <ClCompile Include="Engine\scene\TiledTestScene.cpp" />
     <ClCompile Include="Engine\scene\PostProcessTestScene.cpp" />
+    <ClCompile Include="Engine\scene\PathfindTestScene.cpp" />
+    <ClCompile Include="Engine\ai\NavGrid.cpp" />
+    <ClCompile Include="Engine\ai\PathFollower.cpp" />
     <ClCompile Include="Engine\object\Rigidbody.cpp" />
     <ClCompile Include="Engine\scene\UITestScene.cpp" />
     <ClCompile Include="Engine\ui\UIElement.cpp" />
@@ -380,6 +383,9 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="Engine\2d\SpriteDrawable.h" />
     <ClInclude Include="Engine\scene\TiledTestScene.h" />
     <ClInclude Include="Engine\scene\PostProcessTestScene.h" />
+    <ClInclude Include="Engine\scene\PathfindTestScene.h" />
+    <ClInclude Include="Engine\ai\NavGrid.h" />
+    <ClInclude Include="Engine\ai\PathFollower.h" />
     <ClInclude Include="Engine\object\Rigidbody.h" />
     <ClInclude Include="Engine\scene\UITestScene.h" />
     <ClInclude Include="Engine\ui\UIElement.h" />

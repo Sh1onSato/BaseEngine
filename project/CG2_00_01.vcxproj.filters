@@ -40,6 +40,12 @@
     <Filter Include="ソース ファイル\engine\io">
       <UniqueIdentifier>{c3eb09d8-b8cf-41af-b3df-f0ab46292ff0}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ソース ファイル\engine\ai">
+      <UniqueIdentifier>{353f5f10-edde-4903-8df9-c3faff3d2949}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\engine\ai">
+      <UniqueIdentifier>{1696527b-05b2-4421-9583-98e7c9b266df}</UniqueIdentifier>
+    </Filter>
     <Filter Include="ソース ファイル\engine\scene">
       <UniqueIdentifier>{6ed9b7fc-fac7-4df8-96bc-9159f5b4a280}</UniqueIdentifier>
     </Filter>
@@ -299,6 +305,15 @@
     </ClCompile>
     <ClCompile Include="Engine\2d\TileMap.cpp">
       <Filter>ソース ファイル\engine\2d</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\scene\PathfindTestScene.cpp">
+      <Filter>ソース ファイル\engine\scene</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ai\NavGrid.cpp">
+      <Filter>ソース ファイル\engine\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ai\PathFollower.cpp">
+      <Filter>ソース ファイル\engine\ai</Filter>
     </ClCompile>
     <ClCompile Include="Engine\scene\PostProcessTestScene.cpp">
       <Filter>ソース ファイル\engine\scene</Filter>
@@ -657,6 +672,15 @@
     </ClInclude>
     <ClInclude Include="Engine\2d\SpriteDrawable.h">
       <Filter>ヘッダー ファイル\engine\2d</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\scene\PathfindTestScene.h">
+      <Filter>ヘッダー ファイル\engine\scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ai\NavGrid.h">
+      <Filter>ヘッダー ファイル\engine\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ai\PathFollower.h">
+      <Filter>ヘッダー ファイル\engine\ai</Filter>
     </ClInclude>
     <ClInclude Include="Engine\scene\PostProcessTestScene.h">
       <Filter>ヘッダー ファイル\engine\scene</Filter>
