@@ -1,4 +1,5 @@
 #include "SceneManager.h"
+#include "AudioManager.h"
 #include "Sprite.h"
 #include "SpriteCommon.h"
 #include "GameTime.h"
@@ -39,6 +40,8 @@ void SceneManager::SwapScene() {
     DebugDraw::SetCamera(nullptr);
     // 旧シーンで変えた画面の効果を、既定（MyGame で決めた物）に戻す
     Framework::GetInstance()->GetPostProcess()->ResetToDefault();
+    // 反響は場所ごとの物なので、次のシーンに持ち越さない
+    AudioManager::GetInstance()->SetReverb(ReverbPreset::kOff);
 
     if (currentScene) {
         // 次のシーンに自分（マネージャ）を教える

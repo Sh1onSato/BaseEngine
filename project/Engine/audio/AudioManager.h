@@ -2,6 +2,7 @@
 #include "Audio.h"
 #include "Structs.h"
 #include <x3daudio.h>
+#include <algorithm>
 #include <cstdint>
 #include <map>
 #include <string>
@@ -11,6 +12,22 @@
 enum class AudioCategory {
     kBGM,
     kSE,
+    kCount,
+};
+
+// 反響（リバーブ）の種類。場所の広さ・壁の固さに合わせて選ぶ
+enum class ReverbPreset {
+    kOff,           // 反響なし
+    kSmallRoom,     // 小さい部屋
+    kLargeRoom,     // 広い部屋
+    kHall,          // ホール
+    kCave,          // 洞窟
+    kStoneCorridor, // 石の廊下
+    kSewerPipe,     // 下水管・トンネル
+    kForest,        // 森
+    kCity,          // 街中
+    kMountains,     // 山（遠くまで響く）
+    kUnderwater,    // 水中
     kCount,
 };
 
@@ -49,7 +66,7 @@ public:
     void Pause(SoundHandle handle);
     void Resume(SoundHandle handle);
     void SetVolume(SoundHandle handle, float volume);
-    // 再生速度（=音程）の倍率。1.0が等倍（ボイス作成時の上限により最大2.0）
+    // 再生速度（=音程）の倍率。1.0が等倍（ボイス作成時の上限により最大2.0。3D の音はドップラーの倍率も掛かる）
     void SetPitch(SoundHandle handle, float ratio);
     // 左右の振り分け（-1 で左だけ、0 で真ん中、1 で右だけ）。2D のゲームで画面の左右に合わせる用。3D の音には効かない
     void SetPan(SoundHandle handle, float pan);
@@ -71,8 +88,31 @@ public:
     bool IsListenerFollowingCamera() const { return isListenerFollowingCamera; }
     const Vector3& GetListenerPosition() const { return listenerPosition; }
 
-    // 3D の音・左右の振り分けを付けた音の、今の左右の音量（確認表示用。距離の減衰を含む。無ければ false）
+    // 3D の音・左右の振り分けを付けた音の、今の左右の音量（確認表示用。距離の減衰と遮り具合を含む。無ければ false）
     bool GetOutputGains(SoundHandle handle, float& outLeft, float& outRight) const;
+
+    // ドップラー効果（近づく音は高く、遠ざかる音は低く聞こえる）。音とリスナーの速さは位置の変化から自動で求める。
+    // 1 で現実と同じ（音速 343 m/s。ゲームの 1 単位 = 1m のとき）。大げさにしたいなら 2〜5、要らないなら 0。
+    // 1 フレームで大きく動いた（ワープ・カメラの切り替え）ときは、その動きを速さとみなさない
+    void SetDopplerScale(float scale) { dopplerScale = (std::max)(scale, 0.0f); }
+    float GetDopplerScale() const { return dopplerScale; }
+    // 今の音程の倍率（SetPitch とドップラーを掛けた値。確認表示用。無ければ 1）
+    float GetFrequencyRatio(SoundHandle handle) const;
+
+    // 遮り具合（0 = 何もない、1 = 壁の向こう）。こもった音（高い音が消える）になり、少し小さくなる。
+    // 壁の判定はゲーム側で行う（例: リスナーから音へ CollisionManager::Raycast を飛ばし、当たったら 1）
+    void SetOcclusion(SoundHandle handle, float amount);
+
+    // 反響。場所ごとに1つ選ぶ（シーンの Initialize や、部屋に入ったときに呼ぶ）。シーンを切り替えると kOff に戻る
+    void SetReverb(ReverbPreset preset);
+    ReverbPreset GetReverb() const { return reverbPreset; }
+    static const char* GetReverbName(ReverbPreset preset);
+    // 音ごとの反響の量（0〜1）。既定では 3D の音は 1（遠いほど小さくなる）、それ以外（BGM・UI の音）は 0
+    void SetReverbSend(SoundHandle handle, float amount);
+
+    // カテゴリ全体をこもらせる（0 = 普通、1 = 強くこもる）。ポーズ中に BGM をこもらせる、水中の表現など
+    void SetCategoryMuffle(AudioCategory category, float amount);
+    float GetCategoryMuffle(AudioCategory category) const { return categoryMuffles[static_cast<size_t>(category)]; }
 
     // 全ての音を停止（シーン遷移時など）
     void StopAll();
@@ -108,8 +148,15 @@ private:
         // 3D の音
         bool is3D = false;
         Vector3 position = { 0.0f, 0.0f, 0.0f };
+        Vector3 previousPosition = { 0.0f, 0.0f, 0.0f }; // 前の Update での位置（速さを求める）
+        Vector3 velocity = { 0.0f, 0.0f, 0.0f };
         float minDistance = 1.0f;
         float maxDistance = 30.0f;
+        float occlusion = 0.0f;
+        float reverbSend = 0.0f;
+        // 音程: pitch は SetPitch の値、dopplerFactor はドップラーの倍率
+        float pitch = 1.0f;
+        float dopplerFactor = 1.0f;
         // 左右の振り分け（3D でない音）
         bool hasPan = false;
         float pan = 0.0f;
@@ -130,6 +177,14 @@ private:
     void ApplyPan(PlayingVoice& voice);
     // 出力の行列を設定し、確認表示用に左右の音量を覚える
     void SetOutputMatrix(PlayingVoice& voice, const float* matrix);
+    // 遮り具合を、カテゴリへの出力のフィルター（こもり）に入れる
+    void ApplyOcclusionFilter(PlayingVoice& voice);
+    // 反響の量を、反響用のサブミックスへの出力に入れる（3D の音は距離で小さくする）
+    void ApplyReverbSend(PlayingVoice& voice);
+    // SetPitch とドップラーを掛けた再生速度にする
+    void ApplyFrequency(PlayingVoice& voice);
+    // こもり具合（0〜1）を XAudio2 のローパスフィルターの値にする
+    XAUDIO2_FILTER_PARAMETERS MakeMuffleFilter(float amount) const;
 
     static AudioManager* instance;
     std::map<std::string, Audio::SoundData> soundMap;
@@ -151,4 +206,14 @@ private:
     Vector3 listenerPosition = { 0.0f, 0.0f, 0.0f };
     Vector3 listenerForward = { 0.0f, 0.0f, 1.0f };
     Vector3 listenerUp = { 0.0f, 1.0f, 0.0f };
+    Vector3 previousListenerPosition = { 0.0f, 0.0f, 0.0f };
+    Vector3 listenerVelocity = { 0.0f, 0.0f, 0.0f };
+    bool hasPreviousListenerPosition = false;
+    float dopplerScale = 1.0f;
+    uint32_t outputSampleRate = 48000;
+
+    // 反響（カテゴリごとに1つ。反響した音もカテゴリの音量に従うように、出力先はカテゴリのサブミックス）
+    IXAudio2SubmixVoice* reverbVoices[static_cast<size_t>(AudioCategory::kCount)] = {};
+    ReverbPreset reverbPreset = ReverbPreset::kOff;
+    float categoryMuffles[static_cast<size_t>(AudioCategory::kCount)] = { 0.0f, 0.0f };
 };
