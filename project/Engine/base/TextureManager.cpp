@@ -189,25 +189,44 @@ void TextureManager::LoadTexture(const std::string& filePath){
 	// テクスチャの読み込み
 	DirectX::ScratchImage image{};
 	std::wstring filePathW = ConvertString(filePath);
+	const bool isDds = filePath.find(".dds") != std::string::npos;
 	HRESULT hr;
-	if (filePath.find(".dds") != std::string::npos) {
+	if (isDds) {
 		hr = DirectX::LoadFromDDSFile(filePathW.c_str(), DirectX::DDS_FLAGS_NONE, nullptr, image);
 	} else {
 		hr = DirectX::LoadFromWICFile(filePathW.c_str(), DirectX::WIC_FLAGS_FORCE_SRGB, nullptr, image);
 	}
 	Logger::CheckHResult(hr, "TextureManager: Load texture file(" + filePath + ")");
 
+	RegisterImage(filePath, image, isDds);
+}
+
+void TextureManager::LoadTextureFromMemory(const std::string& name, const uint8_t* data, size_t size) {
+	// 読み込み済みなら読み直さない（LoadTexture と同じ）
+	if (uint32_t found = FindIndex(name); found != kNotFound) {
+		textureDatas[found].sceneSerial = currentSceneSerial;
+		return;
+	}
+
+	DirectX::ScratchImage image{};
+	HRESULT hr = DirectX::LoadFromWICMemory(data, size, DirectX::WIC_FLAGS_FORCE_SRGB, nullptr, image);
+	Logger::CheckHResult(hr, "TextureManager: Load texture from memory(" + name + ")");
+
+	RegisterImage(name, image, false);
+}
+
+void TextureManager::RegisterImage(const std::string& name, DirectX::ScratchImage& image, bool isDds) {
 	// ミニマップの作成（DDSの場合は既に含まれていることが多いのでチェック）
 	DirectX::ScratchImage mipChain{};
-	if (DirectX::IsCompressed(image.GetMetadata().format) || filePath.find(".dds") != std::string::npos) {
+	if (DirectX::IsCompressed(image.GetMetadata().format) || isDds) {
 		mipChain = std::move(image);
 	} else {
-		hr = DirectX::GenerateMipMaps(image.GetImages(), image.GetImageCount(), image.GetMetadata(), DirectX::TEX_FILTER_SRGB, 0, mipChain);
-		Logger::CheckHResult(hr, "TextureManager: GenerateMipMaps(" + filePath + ")");
+		HRESULT hr = DirectX::GenerateMipMaps(image.GetImages(), image.GetImageCount(), image.GetMetadata(), DirectX::TEX_FILTER_SRGB, 0, mipChain);
+		Logger::CheckHResult(hr, "TextureManager: GenerateMipMaps(" + name + ")");
 	}
 
 	// テクスチャデータを追加
-	TextureData& textureData = textureDatas[AllocateSlot(filePath)];
+	TextureData& textureData = textureDatas[AllocateSlot(name)];
 	textureData.metadata = mipChain.GetMetadata();
 	textureData.resource = CreateTextureResource(dxCommon->GetDevice(), textureData.metadata);
 

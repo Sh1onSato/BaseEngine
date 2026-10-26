@@ -115,6 +115,9 @@ public:
 	/// </summary>
 	/// <param name="filePath">テクスチャファイルのパス</param>
 	void LoadTexture(const std::string& filePath);
+	// 画像ファイルの中身（png・jpg などのバイト列）から読み込む（glTF の中に入っている画像用）。
+	// name は他と重ならない名前にする（Acquire でこの名前を使う）。読み込み済みなら何もしない
+	void LoadTextureFromMemory(const std::string& name, const uint8_t* data, size_t size);
 
 	/// <summary>
 	/// 1x1の白いテクスチャを内部で生成する
@@ -200,6 +203,8 @@ private:
 
 	// 名前の画像の場所を確保して SRV 番号を取る（中身は呼んだ側が作る）
 	uint32_t AllocateSlot(const std::string& name);
+	// 読み込んだ画像に（DDS 以外は）ミップマップを作り、GPU に送って name で登録する
+	void RegisterImage(const std::string& name, DirectX::ScratchImage& image, bool isDds);
 	// 見つからなければ kNotFound
 	static constexpr uint32_t kNotFound = UINT32_MAX;
 	uint32_t FindIndex(const std::string& filePath) const;

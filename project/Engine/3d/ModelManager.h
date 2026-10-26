@@ -26,8 +26,12 @@ public:
 	// 終了
 	void Finalize();
 
-	// モデルのロード（すでに読み込み済みならそれを返す）
+	// モデルのロード（すでに読み込み済みならそれを返す）。.obj と .gltf / .glb に対応。
+	// glTF は動かない表示用（骨で動くモデルはレストポーズで止まる。動かすときは LoadGltfModel と SkinnedObject3d を使う）
 	std::shared_ptr<Model> LoadModel(const std::string& directoryPath, const std::string& filename);
+
+	// .gltf / .glb か（大文字・小文字は区別しない）
+	static bool IsGltfFile(const std::string& filename);
 
 	// 1辺1・中心が原点の白い立方体（ファイル不要。初回に作って使い回す）。色は Object3d::SetColor で付ける
 	std::shared_ptr<Model> GetCubeModel();

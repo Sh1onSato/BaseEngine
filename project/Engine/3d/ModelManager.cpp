@@ -1,6 +1,16 @@
 #include "ModelManager.h"
 #include "GltfLoader.h"
 #include "PrimitiveMesh.h"
+#include <algorithm>
+#include <cctype>
+#include <filesystem>
+
+bool ModelManager::IsGltfFile(const std::string& filename) {
+	std::string extension = std::filesystem::path(filename).extension().string();
+	std::transform(extension.begin(), extension.end(), extension.begin(),
+		[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+	return extension == ".gltf" || extension == ".glb";
+}
 
 ModelManager* ModelManager::GetInstance() {
 	static ModelManager instance;
@@ -28,7 +38,13 @@ std::shared_ptr<Model> ModelManager::LoadModel(const std::string& directoryPath,
 
 	// 新しく生成して初期化
 	std::shared_ptr<Model> model = std::make_shared<Model>();
-	model->Initialize(dxCommon, directoryPath, filename);
+	if (IsGltfFile(filename)) {
+		// glTF は中身（GltfModelData）もキャッシュする。骨で動くメッシュはレストポーズの形で止めて表示する
+		std::shared_ptr<GltfModelData> gltfData = LoadGltfModel(directoryPath, filename);
+		model->InitializeFromGltf(dxCommon, *gltfData, false);
+	} else {
+		model->Initialize(dxCommon, directoryPath, filename);
+	}
 
 	// キャッシュに保存して返す
 	models[filePath] = { model, currentSceneSerial, false };

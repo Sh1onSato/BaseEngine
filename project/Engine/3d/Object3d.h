@@ -35,6 +35,8 @@ public:
 
     // Getter
     const Transform& GetTransform() const { return transform; }
+    // Update で計算したワールド行列
+    const Matrix4x4& GetWorldMatrix() const { return worldMatrix; }
 
 private:
     Object3dCommon* common = nullptr;

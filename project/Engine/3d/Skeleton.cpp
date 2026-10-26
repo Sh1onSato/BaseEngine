@@ -1,54 +1,28 @@
 #include "Skeleton.h"
-#include <unordered_map>
 
 Skeleton Skeleton::Create(const GltfModelData& gltfData) {
     Skeleton skeleton;
-    const std::vector<int32_t>& jointNodeIndices = gltfData.skin.jointNodeIndices;
-    int32_t jointCount = static_cast<int32_t>(jointNodeIndices.size());
-    skeleton.joints.resize(jointCount);
+    const int32_t nodeCount = static_cast<int32_t>(gltfData.nodes.size());
+    skeleton.joints.resize(nodeCount);
 
-    // ノードインデックス -> joint配列インデックスの逆引きマップ
-    // （jointNodeIndices=[1,2]なら { 1:0, 2:1 } となり、「ノード1がjoint0、ノード2がjoint1」という対応が引ける）
-    std::unordered_map<int32_t, int32_t> nodeIndexToJointIndex;
-    for (int32_t jointIndex = 0; jointIndex < jointCount; ++jointIndex) {
-        nodeIndexToJointIndex[jointNodeIndices[jointIndex]] = jointIndex;
-    }
-
-    for (int32_t jointIndex = 0; jointIndex < jointCount; ++jointIndex) {
-        int32_t nodeIndex = jointNodeIndices[jointIndex];
+    // ノード番号をそのままジョイント番号にする（骨の番号への変換は SkinCluster が jointNodeIndices で行う）
+    for (int32_t nodeIndex = 0; nodeIndex < nodeCount; ++nodeIndex) {
         const GltfNode& node = gltfData.nodes[nodeIndex];
-
-        Joint& joint = skeleton.joints[jointIndex];
+        Joint& joint = skeleton.joints[nodeIndex];
         joint.name = node.name;
         joint.transform.scale = node.scale;
         joint.transform.translate = node.translate;
         joint.rotate = node.rotate;
-        joint.index = jointIndex;
-
-        // 親ノードインデックス(gltfData.nodesベース)をjoint配列インデックスに変換する。
-        // 親がスキンに含まれない（jointNodeIndicesに存在しない）場合はルート扱いにする。
-        if (node.parent >= 0) {
-            auto it = nodeIndexToJointIndex.find(node.parent);
-            if (it != nodeIndexToJointIndex.end()) {
-                joint.parent = it->second;
-            }
+        joint.index = nodeIndex;
+        if (node.parent >= 0 && node.parent < nodeCount) {
+            joint.parent = node.parent;
+        } else {
+            skeleton.rootIndices.push_back(nodeIndex);
         }
-
-        // 子ノードインデックスのうち、スキンに含まれるものだけをjoint配列インデックスに変換して登録する
-        for (int32_t childNodeIndex : node.children) {
-            auto it = nodeIndexToJointIndex.find(childNodeIndex);
-            if (it != nodeIndexToJointIndex.end()) {
-                joint.children.push_back(it->second);
+        for (int32_t childIndex : node.children) {
+            if (childIndex >= 0 && childIndex < nodeCount) {
+                joint.children.push_back(childIndex);
             }
-        }
-    }
-
-    // parentを持たないjointをルートとする（単一ルートのスキンを想定。最初に見つかったものを採用）
-    skeleton.rootIndex = 0;
-    for (int32_t jointIndex = 0; jointIndex < jointCount; ++jointIndex) {
-        if (!skeleton.joints[jointIndex].parent.has_value()) {
-            skeleton.rootIndex = jointIndex;
-            break;
         }
     }
 
@@ -57,8 +31,18 @@ Skeleton Skeleton::Create(const GltfModelData& gltfData) {
 }
 
 void Skeleton::Update() {
-    if (joints.empty()) { return; }
-    UpdateJointRecursive(rootIndex, nullptr);
+    for (int32_t rootIndex : rootIndices) {
+        UpdateJointRecursive(rootIndex, nullptr);
+    }
+}
+
+int32_t Skeleton::FindJoint(const std::string& name) const {
+    for (const Joint& joint : joints) {
+        if (joint.name == name) {
+            return joint.index;
+        }
+    }
+    return -1;
 }
 
 void Skeleton::UpdateJointRecursive(int32_t jointIndex, const Matrix4x4* parentSkeletonSpaceMatrix) {

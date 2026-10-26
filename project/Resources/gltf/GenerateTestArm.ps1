@@ -100,13 +100,14 @@ foreach ($seg in $segments) {
         $weights.AddRange([double[]]@($seg.w1[0], $seg.w1[1], 0.0, 0.0)) # topJ
         $weights.AddRange([double[]]@($seg.w1[0], $seg.w1[1], 0.0, 0.0)) # topI
 
-        # 外側から見てCCWが前面（PSOのFrontCounterClockwise=FALSE、SkinningTestSceneと同じ巻き順）
+        # glTF の決まりどおり、外側から見て反時計回りが表（右手系）。
+        # GltfLoader が左手系に直すときに Z を反転して頂点の順番を逆にするので、エンジンでは時計回り＝表になる
         $vi0 = $vertexIndex
         $vi1 = $vertexIndex + 1
         $vi2 = $vertexIndex + 2
         $vi3 = $vertexIndex + 3
-        $indices.Add($vi0); $indices.Add($vi1); $indices.Add($vi2)
-        $indices.Add($vi0); $indices.Add($vi2); $indices.Add($vi3)
+        $indices.Add($vi0); $indices.Add($vi2); $indices.Add($vi1)
+        $indices.Add($vi0); $indices.Add($vi3); $indices.Add($vi2)
         $vertexIndex += 4
     }
 }

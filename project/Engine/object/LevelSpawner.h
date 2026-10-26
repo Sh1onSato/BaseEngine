@@ -45,7 +45,7 @@ public:
     void RegisterType(const std::string& className);
 
     // モデルを探すフォルダ（既定 "Resources/models"）。
-    // "file_name" が "cube" なら <フォルダ>/cube/cube.obj、"cube.obj" なら <フォルダ>/cube.obj を読む
+    // "file_name" が "cube" なら <フォルダ>/cube/cube.obj（無ければ cube.gltf → cube.glb）、"cube.obj" なら <フォルダ>/cube.obj を読む
     void SetModelDirectory(const std::string& directory) { modelDirectory = directory; }
 
     // level の物をすべて objects に作り、作った物を返す（Reload で読み直せるよう level.filePath を覚える）
@@ -54,7 +54,7 @@ public:
     std::vector<GameObject*> LoadAndSpawn(GameObjectManager& objects, const std::string& filePath);
     // このスポナーが作った物を全部消して、最後に Spawn したファイルを読み直して作り直す。
     // 読み込みに失敗したら false（今の物はそのまま残る。JSON の書きかけで落ちないように）。
-    // 注意: モデル(.obj)は ModelManager が覚えているので、中身を書き換えても読み直されない
+    // 注意: モデル(.obj / .gltf / .glb)は ModelManager が覚えているので、中身を書き換えても読み直されない
     // （シーンを切り替えて誰も使わなくなれば解放されるので、別のシーンを挟んでから戻れば読み直される）
     bool Reload(GameObjectManager& objects, std::string* errorMessage = nullptr);
     // このスポナーが作った物を全部 Destroy する（実際に消えるのはフレームの最後）

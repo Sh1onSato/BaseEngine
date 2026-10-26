@@ -162,10 +162,18 @@ std::shared_ptr<Model> LevelSpawner::LoadModelOrFallback(const std::string& file
         return isSphere ? modelManager->GetSphereModel() : modelManager->GetCubeModel();
     }
 
-    // "cube" → <フォルダ>/cube/cube.obj、"cube.obj" → <フォルダ>/cube.obj
+    // "cube" → <フォルダ>/cube/cube.obj（無ければ cube.gltf → cube.glb）、"cube.obj" → <フォルダ>/cube.obj
     const bool hasExtension = std::filesystem::path(fileName).has_extension();
     const std::string directory = hasExtension ? modelDirectory : modelDirectory + "/" + fileName;
-    const std::string file = hasExtension ? fileName : fileName + ".obj";
+    std::string file = hasExtension ? fileName : fileName + ".obj";
+    if (!hasExtension) {
+        for (const char* extension : { ".obj", ".gltf", ".glb" }) {
+            if (std::filesystem::exists(directory + "/" + fileName + extension)) {
+                file = fileName + extension;
+                break;
+            }
+        }
+    }
     if (!std::filesystem::exists(directory + "/" + file)) {
         if (warnedNames.insert("model:" + fileName).second) {
             Logger::Log("LevelSpawner: モデルが見つからないので白い立方体で表示します: " + directory + "/" + file + "\n");
