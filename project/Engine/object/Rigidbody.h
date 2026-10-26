@@ -4,7 +4,9 @@
 class GameObject;
 
 /// <summary>
-/// GameObject に付ける「物理で動く」ための部品（重力・速度・質量・跳ね返り）。回転はしない。
+/// GameObject に付ける「物理で動く」ための部品（重力・速度・質量・跳ね返り）。
+/// 既定では回転しない（キャラクター向け）。SetUseRotation(true) にすると、ぶつかった所や AddImpulseAtPosition で回り、
+/// 転がる・倒れる・積んだ箱が崩れる（球・OBB・カプセル・2D の円。AABB・2D の四角は形が回らないので回転しない）。
 /// GameObject::AddRigidbody() で付ける。計算は GameObjectManager が固定間隔（既定 1/60 秒）でまとめて行う。
 ///
 /// 使い方の例（Initialize の中で）:
@@ -69,6 +71,29 @@ public:
     void SetInterpolate(bool enable) { interpolate = enable; }
     bool GetInterpolate() const { return interpolate; }
 
+    // --- 回転（SetUseRotation(true) のときだけ） ---
+    // 回転の速さ（ワールドの軸のまわりに 1 秒あたり何ラジアン。向きは右ねじ）。直接読み書きしてよい
+    Vector3 angularVelocity = { 0.0f, 0.0f, 0.0f };
+    // 物理で回るようにする（既定 false）。回る量は付いている最初の 3D コライダー（2D なら円）の形と質量から自動で決まる
+    void SetUseRotation(bool use);
+    bool GetUseRotation() const { return useRotation; }
+    // ねじる力（毎フレーム呼ぶ）・瞬間的に回す
+    void AddTorque(const Vector3& torque);
+    void AddAngularImpulse(const Vector3& impulse);
+    // ワールドの position を押す（ずれた所を押すほど回る。打撃・爆風など）。回転しない物は AddForce / AddImpulse と同じ
+    void AddForceAtPosition(const Vector3& force, const Vector3& position);
+    void AddImpulseAtPosition(const Vector3& impulse, const Vector3& position);
+    // 回転の抵抗（0 で無し。転がり続ける球を止めるのにも使う。既定 0.05）
+    void SetAngularDamping(float damping) { angularDamping = damping; }
+    float GetAngularDamping() const { return angularDamping; }
+    // ワールドの軸ごとに回らなくする（2D なら x と y を固定して z だけ回す。横倒しにしたくないなら x と z）
+    void SetFreezeRotation(bool x, bool y, bool z);
+    // 今の向き（transform.rotate と同じ向き）。transform.rotate を直接変えてもよい（ワープ扱い）
+    Quaternion GetRotation() const { return orientation; }
+    void SetRotation(const Quaternion& rotation);
+    // ワールドの position の点が動いている速さ（回転の分を含む）
+    Vector3 GetPointVelocity(const Vector3& position) const;
+
     // --- 状態 ---
     // 足元に何かがあるか（重力と反対向きの面に乗っている）。最後の物理計算の結果
     bool IsGrounded() const { return isGrounded; }
@@ -78,6 +103,10 @@ public:
     Vector3 GetRenderPosition() const;
     // 0 なら動かない（キネマティック）。押し戻しの分け方に使う
     float GetInverseMass() const { return isKinematic ? 0.0f : 1.0f / mass; }
+    // 回る物か（SetUseRotation(true)・キネマティックでない・回れる形）
+    bool IsRotating() const { return useRotation && !isKinematic && hasInertia; }
+    // ワールドの回す力 v に対する「回りやすさ」を掛けた回転の速さの変化（慣性テンソルの逆行列 × v）。回らない物は 0
+    Vector3 ApplyInverseInertia(const Vector3& v) const;
 
     GameObject* GetOwner() const { return owner; }
 
@@ -119,4 +148,25 @@ private:
     bool hasPhysicsPosition = false;
     // 段差に乗ったときの見た目のずれ（描画位置に足す。GameObjectManager が毎フレーム 0 に近づける）
     Vector3 stepSmoothOffset = { 0.0f, 0.0f, 0.0f };
+
+    // 回転
+    // 持ち主のコライダーの形と質量から、ローカルの軸ごとの回りにくさの逆数を決める（GameObjectManager が物理の前に呼ぶ）
+    void UpdateInertia();
+    // orientation を transform.rotate に書き込む
+    void WriteRotation();
+    bool useRotation = false;
+    float angularDamping = 0.05f;
+    bool freezeRotationX = false;
+    bool freezeRotationY = false;
+    bool freezeRotationZ = false;
+    // ローカルの X / Y / Z 軸のまわりの「回りにくさ」の逆数（0 ならその軸では回らない）と、回れる形か
+    Vector3 localInverseInertia = { 0.0f, 0.0f, 0.0f };
+    bool hasInertia = false;
+    Quaternion orientation = { 0.0f, 0.0f, 0.0f, 1.0f };
+    // 補間用: 最後の物理ステップの前の向き
+    Quaternion previousOrientation = { 0.0f, 0.0f, 0.0f, 1.0f };
+    // 最後に transform.rotate に書いた値（違っていたらコードで向きを変えた = ワープ）
+    Vector3 writtenRotation = { 0.0f, 0.0f, 0.0f };
+    bool hasOrientation = false;
+    Vector3 pendingAngularVelocityChange = { 0.0f, 0.0f, 0.0f };
 };

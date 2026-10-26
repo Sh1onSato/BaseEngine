@@ -70,6 +70,13 @@ public:
 	static Quaternion DirectionToDirection(const Vector3& from, const Vector3& to);
 	static Matrix4x4 MakeRotateMatrix(const Quaternion& q);
 	static Quaternion Slerp(const Quaternion& q0, const Quaternion& q1, float t);
+	// オイラー角（transform.rotate。X→Y→Z の順に回す、MakeAffineMatrix と同じ）とクォータニオンの変換
+	static Quaternion MakeQuaternionFromEuler(const Vector3& euler);
+	static Vector3 MakeEulerFromQuaternion(const Quaternion& q);
+	// 回転行列（MakeRotateMatrix と同じ並び。各行がローカル軸のワールドの向き）からクォータニオン
+	static Quaternion MakeQuaternionFromMatrix(const Matrix4x4& m);
+	// クォータニオンで v を回す
+	static Vector3 RotateVector(const Vector3& v, const Quaternion& q);
 
 	// デバッグ用描画（実際の実装は描画クラスで行うべきだが、現状維持）
 	static void DrawSphere(const Sphere& sphere, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color);

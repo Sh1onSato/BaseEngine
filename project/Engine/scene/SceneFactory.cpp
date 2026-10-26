@@ -15,6 +15,7 @@
 #include "SoundPropagationTestScene.h"
 #include "AnimationTestScene.h"
 #include "TweenTestScene.h"
+#include "RigidbodyTestScene.h"
 #include "Logger.h"
 #include <format>
 
@@ -84,6 +85,10 @@ BaseScene* SceneFactory::CreateScene(const std::string& sceneName) {
     else if (sceneName == "TWEEN_TEST") {
         // Tween・TweenSequence・カメラの揺れ・ヒットストップの検証用シーン
         newScene = new TweenTestScene();
+    }
+    else if (sceneName == "RIGIDBODY_TEST") {
+        // 回転する剛体（積んだ箱・ドミノ・転がる球）の検証用シーン
+        newScene = new RigidbodyTestScene();
     }
     else {
         // 該当なしの場合は無言でnullptrを返すと「シーンが何も更新・描画されない」という

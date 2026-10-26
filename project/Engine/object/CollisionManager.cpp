@@ -19,6 +19,15 @@ namespace {
     constexpr float kFaceNormalCosine = 0.999f;
     // 地面に吸い付ける距離の最小値（段差の高さ 0 のキャラクターでも下り坂から離れないように）
     constexpr float kMinGroundSnapDistance = 0.1f;
+    // 回る物の当たっている点: 相手の形からこの距離までの点を「触れている」とみなす
+    constexpr float kContactSlop = 0.02f;
+    // 1つの組で使う点の数の上限と、速度を直す繰り返しの回数（多いほど積んだ物が安定するが重い）
+    constexpr size_t kMaxContactPoints = 8;
+    constexpr int kSolverIterations = 10;
+    // 同じ点とみなす距離
+    constexpr float kSamePointDistance = 0.01f;
+    // 前のステップの点と「同じ所で当たり続けている」とみなす距離
+    constexpr float kWarmStartDistance = 0.05f;
 
     // 丸い形（球・カプセル・円）の半径。箱は 0
     float GetRoundRadius(const Collider& collider) {
@@ -70,6 +79,91 @@ namespace {
         }
         }
         return collider.GetWorldBounds().min;
+    }
+
+    // 当たっている点の候補（相手のいる向き toward へ一番出ている所。箱は角を全部、カプセルは両端）
+    void CollectCandidatePoints(const Collider& collider, const Vector3& toward, std::vector<Vector3>& out) {
+        auto addBoxCorners = [&out](const Vector3& center, const Vector3 axes[3], const Vector3& halfSize) {
+            for (int i = 0; i < 8; ++i) {
+                const float sx = (i & 1) ? 1.0f : -1.0f;
+                const float sy = (i & 2) ? 1.0f : -1.0f;
+                const float sz = (i & 4) ? 1.0f : -1.0f;
+                out.push_back(center + axes[0] * (halfSize.x * sx) + axes[1] * (halfSize.y * sy) + axes[2] * (halfSize.z * sz));
+            }
+        };
+        switch (collider.GetShape()) {
+        case ColliderShape::kSphere: {
+            const Sphere sphere = collider.GetWorldSphere();
+            out.push_back(sphere.center + toward * sphere.radius);
+            break;
+        }
+        case ColliderShape::kAABB: {
+            const AABB aabb = collider.GetWorldAABB();
+            const Vector3 axes[3] = { { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } };
+            addBoxCorners((aabb.min + aabb.max) * 0.5f, axes, (aabb.max - aabb.min) * 0.5f);
+            break;
+        }
+        case ColliderShape::kOBB: {
+            const OBB box = collider.GetWorldOBB();
+            addBoxCorners(box.center, box.axes, box.halfSize);
+            break;
+        }
+        case ColliderShape::kCapsule: {
+            const Capsule capsule = collider.GetWorldCapsule();
+            out.push_back(capsule.segment.start + toward * capsule.radius);
+            out.push_back(capsule.segment.end + toward * capsule.radius);
+            break;
+        }
+        case ColliderShape::kCircle: {
+            const Circle circle = collider.GetWorldCircle();
+            out.push_back(Vector3{ circle.center.x, circle.center.y, 0.0f } + toward * circle.radius);
+            break;
+        }
+        case ColliderShape::kRect: {
+            const Rect rect = collider.GetWorldRect();
+            out.push_back({ rect.min.x, rect.min.y, 0.0f });
+            out.push_back({ rect.max.x, rect.min.y, 0.0f });
+            out.push_back({ rect.min.x, rect.max.y, 0.0f });
+            out.push_back({ rect.max.x, rect.max.y, 0.0f });
+            break;
+        }
+        }
+    }
+
+    // 点から形までの距離（中に入っていれば 0）
+    float DistanceToShape(const Collider& collider, const Vector3& point) {
+        switch (collider.GetShape()) {
+        case ColliderShape::kSphere: {
+            const Sphere sphere = collider.GetWorldSphere();
+            return (std::max)(Calculation::Length(point - sphere.center) - sphere.radius, 0.0f);
+        }
+        case ColliderShape::kAABB:
+            return Calculation::Length(point - Collision::ClosestPointOnAABB(point, collider.GetWorldAABB()));
+        case ColliderShape::kOBB:
+            return Calculation::Length(point - Collision::ClosestPointOnOBB(point, collider.GetWorldOBB()));
+        case ColliderShape::kCapsule: {
+            const Capsule capsule = collider.GetWorldCapsule();
+            return (std::max)(Calculation::Length(point - Collision::ClosestPointOnSegment(point, capsule.segment)) - capsule.radius, 0.0f);
+        }
+        case ColliderShape::kCircle: {
+            const Circle circle = collider.GetWorldCircle();
+            const Vector3 center = { circle.center.x, circle.center.y, point.z };
+            return (std::max)(Calculation::Length(point - center) - circle.radius, 0.0f);
+        }
+        case ColliderShape::kRect: {
+            const Rect rect = collider.GetWorldRect();
+            const Vector3 closest = { std::clamp(point.x, rect.min.x, rect.max.x), std::clamp(point.y, rect.min.y, rect.max.y), point.z };
+            return Calculation::Length(point - closest);
+        }
+        }
+        return 0.0f;
+    }
+
+    // n に直交する2本の向き（摩擦をかける向き）
+    void MakeTangents(const Vector3& n, Vector3& t1, Vector3& t2) {
+        const Vector3 helper = std::abs(n.x) < 0.57f ? Vector3{ 1.0f, 0.0f, 0.0f } : Vector3{ 0.0f, 1.0f, 0.0f };
+        t1 = Calculation::Normalize(Calculation::Cross(n, helper));
+        t2 = Calculation::Cross(n, t1);
     }
 
     // normal が箱の面の向き（どれかの軸と平行）なら true。角・辺に当たったときは斜めの向きになる。
@@ -221,7 +315,10 @@ void CollisionManager::Step(const std::vector<GameObject*>& objects) {
     const std::vector<std::pair<size_t, size_t>> pairs = FindBroadphasePairs();
     lastBroadphasePairCount = pairs.size();
 
+    manifolds.clear();
     ContactMap current = TestPairs(pairs);
+    // 回る物が混ざった組の速度は、全部の組を集めてからまとめて直す
+    SolveManifolds();
     lastHitPairCount = current.size();
     for (auto& [key, contact] : current) {
         frameContacts[key] = contact;
@@ -398,6 +495,7 @@ void CollisionManager::Reset() {
     previousContacts.clear();
     frameContacts.clear();
     pendingExits.clear();
+    impulseCache.clear();
 }
 
 void CollisionManager::GatherColliders(const std::vector<GameObject*>& objects) {
@@ -501,8 +599,19 @@ void CollisionManager::ResolvePenetration(Collider* a, Collider* b, const Collis
     // normal は a を b から離す向きなので、a は +、b は - の向きへ動かす
     GameObject* ownerA = a->GetOwner();
     GameObject* ownerB = b->GetOwner();
+    // 回る物が混ざっていれば、押し戻す前の形で当たっている点を集めておく（速度は後で SolveManifolds が直す）
+    const bool isRotatingPair = IsRotatingPair(ownerA, ownerB);
+    if (isRotatingPair) {
+        manifolds.push_back(BuildManifold(*a, *b, normal, depth));
+        manifolds.back().key = { a, b };
+    }
     ownerA->transform.translate += normal * (depth * shareA);
     ownerB->transform.translate -= normal * (depth * shareB);
+    if (isRotatingPair) {
+        UpdateGrounded(ownerA, normal);
+        UpdateGrounded(ownerB, normal * -1.0f);
+        return;
+    }
 
     const float upSpeedA = ownerA->GetRigidbody() ? Calculation::Dot(ownerA->GetRigidbody()->velocity, upDirection) : 0.0f;
     const float upSpeedB = ownerB->GetRigidbody() ? Calculation::Dot(ownerB->GetRigidbody()->velocity, upDirection) : 0.0f;
@@ -618,6 +727,164 @@ void CollisionManager::ResolveVelocity(GameObject* ownerA, GameObject* ownerB, c
     const Vector3 direction = tangent * (1.0f / tangentSpeed);
     if (bodyA) { bodyA->velocity -= direction * (frictionImpulse * inverseMassA); }
     if (bodyB) { bodyB->velocity += direction * (frictionImpulse * inverseMassB); }
+}
+
+bool CollisionManager::IsRotatingPair(const GameObject* ownerA, const GameObject* ownerB) {
+    const Rigidbody* bodyA = ownerA->GetRigidbody();
+    const Rigidbody* bodyB = ownerB->GetRigidbody();
+    return (bodyA && bodyA->IsRotating()) || (bodyB && bodyB->IsRotating());
+}
+
+CollisionManager::Manifold CollisionManager::BuildManifold(const Collider& a, const Collider& b, const Vector3& normal, float depth) const {
+    Manifold manifold;
+    manifold.ownerA = a.GetOwner();
+    manifold.ownerB = b.GetOwner();
+    manifold.normal = normal;
+    MakeTangents(normal, manifold.tangents[0], manifold.tangents[1]);
+    const Rigidbody* bodyA = manifold.ownerA->GetRigidbody();
+    const Rigidbody* bodyB = manifold.ownerB->GetRigidbody();
+    // 摩擦は小さい方（ResolveVelocity と同じ）
+    manifold.friction = (std::min)(bodyA ? bodyA->friction : kDefaultFriction, bodyB ? bodyB->friction : kDefaultFriction);
+
+    // 片方の形の候補の点のうち、相手に触れていて、めり込みの深さが一番深い所と同じくらいの物を使う。
+    // 一番深い点は「相手の方へ一番出ている点」。そこから法線の向きに離れている分だけ浅い
+    std::vector<std::pair<Vector3, float>> found;
+    auto collect = [&](const Collider& self, const Collider& other, const Vector3& towardOther) {
+        std::vector<Vector3> candidates;
+        CollectCandidatePoints(self, towardOther, candidates);
+        const Vector3 deepest = SupportPoint(self, towardOther);
+        for (const Vector3& point : candidates) {
+            const float pointDepth = depth - Calculation::Dot(deepest - point, towardOther);
+            if (pointDepth < -kContactSlop || DistanceToShape(other, point) > kContactSlop) {
+                continue;
+            }
+            const bool isDuplicate = std::any_of(found.begin(), found.end(), [&](const std::pair<Vector3, float>& existing) {
+                return Calculation::Length(existing.first - point) < kSamePointDistance;
+            });
+            if (!isDuplicate) {
+                found.emplace_back(point, pointDepth);
+            }
+        }
+    };
+    collect(a, b, normal * -1.0f);
+    collect(b, a, normal);
+    if (found.empty()) {
+        // 辺と辺が交わっているなど、どちらの角も相手に入っていない: 両方の一番深い所の真ん中を1点だけ使う
+        found.emplace_back((SupportPoint(a, normal * -1.0f) + SupportPoint(b, normal)) * 0.5f, depth);
+    }
+    // 多すぎるときは深い順に残す
+    if (found.size() > kMaxContactPoints) {
+        std::sort(found.begin(), found.end(), [](const auto& lhs, const auto& rhs) { return lhs.second > rhs.second; });
+        found.resize(kMaxContactPoints);
+    }
+    for (const auto& [position, pointDepth] : found) {
+        ContactPoint point;
+        point.position = position;
+        manifold.points.push_back(point);
+    }
+    return manifold;
+}
+
+void CollisionManager::SolveManifolds() {
+    if (manifolds.empty()) {
+        return;
+    }
+    const Vector3 zero = { 0.0f, 0.0f, 0.0f };
+    auto pointVelocity = [&zero](const Rigidbody* body, const Vector3& position) { return body ? body->GetPointVelocity(position) : zero; };
+    auto inverseMass = [](const Rigidbody* body) { return body ? body->GetInverseMass() : 0.0f; };
+    // 押す向き direction に、点で押したときの「動きにくさ」（質量と回りにくさを合わせた物）の逆数
+    auto effectiveMass = [&](const Rigidbody* bodyA, const Rigidbody* bodyB, const ContactPoint& point, const Vector3& direction) {
+        float sum = inverseMass(bodyA) + inverseMass(bodyB);
+        if (bodyA) {
+            sum += Calculation::Dot(direction, Calculation::Cross(bodyA->ApplyInverseInertia(Calculation::Cross(point.offsetA, direction)), point.offsetA));
+        }
+        if (bodyB) {
+            sum += Calculation::Dot(direction, Calculation::Cross(bodyB->ApplyInverseInertia(Calculation::Cross(point.offsetB, direction)), point.offsetB));
+        }
+        return sum > 0.0f ? 1.0f / sum : 0.0f;
+    };
+    // 点を押す（A は +impulse、B は -impulse）。回る物は回転の速さも変わる
+    auto applyImpulse = [&](Rigidbody* bodyA, Rigidbody* bodyB, const ContactPoint& point, const Vector3& impulse) {
+        if (bodyA && !bodyA->isKinematic) {
+            bodyA->velocity += impulse * bodyA->GetInverseMass();
+            bodyA->angularVelocity += bodyA->ApplyInverseInertia(Calculation::Cross(point.offsetA, impulse));
+        }
+        if (bodyB && !bodyB->isKinematic) {
+            bodyB->velocity -= impulse * bodyB->GetInverseMass();
+            bodyB->angularVelocity -= bodyB->ApplyInverseInertia(Calculation::Cross(point.offsetB, impulse));
+        }
+    };
+
+    // 1. 点ごとの準備（中心からの位置・動きにくさ・跳ね返る速さ）
+    for (Manifold& manifold : manifolds) {
+        Rigidbody* bodyA = manifold.ownerA->GetRigidbody();
+        Rigidbody* bodyB = manifold.ownerB->GetRigidbody();
+        const float restitution = (std::max)(bodyA ? bodyA->restitution : 0.0f, bodyB ? bodyB->restitution : 0.0f);
+        for (ContactPoint& point : manifold.points) {
+            point.offsetA = point.position - manifold.ownerA->transform.translate;
+            point.offsetB = point.position - manifold.ownerB->transform.translate;
+            point.normalMass = effectiveMass(bodyA, bodyB, point, manifold.normal);
+            point.tangentMass[0] = effectiveMass(bodyA, bodyB, point, manifold.tangents[0]);
+            point.tangentMass[1] = effectiveMass(bodyA, bodyB, point, manifold.tangents[1]);
+            const float approachSpeed = Calculation::Dot(pointVelocity(bodyA, point.position) - pointVelocity(bodyB, point.position), manifold.normal);
+            // 重力で少し沈んだだけのぶつかりは跳ねさせない（置いた物が震えないように）
+            point.bounceSpeed = approachSpeed < -restingSpeed ? -restitution * approachSpeed : 0.0f;
+        }
+        // 前のステップに近い所で当たっていた点は、前に押した量を先に押しておく（繰り返しの回数が少なくても積んだ物が支えられる）
+        auto cached = impulseCache.find(manifold.key);
+        if (cached == impulseCache.end()) {
+            continue;
+        }
+        for (ContactPoint& point : manifold.points) {
+            for (const CachedImpulse& previous : cached->second) {
+                if (Calculation::Length(previous.position - point.position) > kWarmStartDistance) {
+                    continue;
+                }
+                point.normalImpulse = previous.normalImpulse;
+                point.tangentImpulse[0] = previous.tangentImpulse[0];
+                point.tangentImpulse[1] = previous.tangentImpulse[1];
+                applyImpulse(bodyA, bodyB, point,
+                             manifold.normal * point.normalImpulse + manifold.tangents[0] * point.tangentImpulse[0] +
+                                 manifold.tangents[1] * point.tangentImpulse[1]);
+                break;
+            }
+        }
+    }
+
+    // 2. 全部の点を何回か繰り返して直す（1つ直すと他の点の速度が変わるので、繰り返すほど全体がそろう）
+    for (int iteration = 0; iteration < kSolverIterations; ++iteration) {
+        for (Manifold& manifold : manifolds) {
+            Rigidbody* bodyA = manifold.ownerA->GetRigidbody();
+            Rigidbody* bodyB = manifold.ownerB->GetRigidbody();
+            for (ContactPoint& point : manifold.points) {
+                // 法線の向き: 近づく速さを消して跳ね返す（引っ張る向きには押さない = 合計がマイナスにならない）
+                const Vector3 relative = pointVelocity(bodyA, point.position) - pointVelocity(bodyB, point.position);
+                const float normalSpeed = Calculation::Dot(relative, manifold.normal);
+                const float previousNormal = point.normalImpulse;
+                point.normalImpulse = (std::max)(previousNormal + point.normalMass * (point.bounceSpeed - normalSpeed), 0.0f);
+                applyImpulse(bodyA, bodyB, point, manifold.normal * (point.normalImpulse - previousNormal));
+
+                // 面に沿った向き: 滑る速さを消す（押し付けている強さ × 摩擦 まで）
+                const float maxFriction = manifold.friction * point.normalImpulse;
+                for (int i = 0; i < 2; ++i) {
+                    const Vector3 slide = pointVelocity(bodyA, point.position) - pointVelocity(bodyB, point.position);
+                    const float tangentSpeed = Calculation::Dot(slide, manifold.tangents[i]);
+                    const float previousTangent = point.tangentImpulse[i];
+                    point.tangentImpulse[i] = std::clamp(previousTangent - point.tangentMass[i] * tangentSpeed, -maxFriction, maxFriction);
+                    applyImpulse(bodyA, bodyB, point, manifold.tangents[i] * (point.tangentImpulse[i] - previousTangent));
+                }
+            }
+        }
+    }
+
+    // 3. 次のステップのために、点ごとに押した量を覚える（今回当たっていない組は忘れる）
+    impulseCache.clear();
+    for (const Manifold& manifold : manifolds) {
+        std::vector<CachedImpulse>& cache = impulseCache[manifold.key];
+        for (const ContactPoint& point : manifold.points) {
+            cache.push_back({ point.position, point.normalImpulse, { point.tangentImpulse[0], point.tangentImpulse[1] } });
+        }
+    }
 }
 
 void CollisionManager::UpdateGrounded(GameObject* owner, const Vector3& normalForOwner) const {

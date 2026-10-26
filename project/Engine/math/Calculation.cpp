@@ -548,3 +548,67 @@ void Calculation::DrawSphere(const Sphere& sphere, const Matrix4x4& viewProjecti
 void Calculation::DrawGrid(const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix) {
     // 描画の実装は現状維持
 }
+
+Quaternion Calculation::MakeQuaternionFromMatrix(const Matrix4x4& m) {
+	// MakeRotateMatrix の逆。行列は「列ベクトルの回転行列」を転置した並びなので、添字を入れ替えて読む
+	Quaternion q;
+	const float trace = m.m[0][0] + m.m[1][1] + m.m[2][2];
+	if (trace > 0.0f) {
+		const float s = std::sqrt(trace + 1.0f) * 2.0f; // 4w
+		q.w = 0.25f * s;
+		q.x = (m.m[1][2] - m.m[2][1]) / s;
+		q.y = (m.m[2][0] - m.m[0][2]) / s;
+		q.z = (m.m[0][1] - m.m[1][0]) / s;
+	} else if (m.m[0][0] > m.m[1][1] && m.m[0][0] > m.m[2][2]) {
+		const float s = std::sqrt(1.0f + m.m[0][0] - m.m[1][1] - m.m[2][2]) * 2.0f; // 4x
+		q.w = (m.m[1][2] - m.m[2][1]) / s;
+		q.x = 0.25f * s;
+		q.y = (m.m[1][0] + m.m[0][1]) / s;
+		q.z = (m.m[2][0] + m.m[0][2]) / s;
+	} else if (m.m[1][1] > m.m[2][2]) {
+		const float s = std::sqrt(1.0f + m.m[1][1] - m.m[0][0] - m.m[2][2]) * 2.0f; // 4y
+		q.w = (m.m[2][0] - m.m[0][2]) / s;
+		q.x = (m.m[1][0] + m.m[0][1]) / s;
+		q.y = 0.25f * s;
+		q.z = (m.m[2][1] + m.m[1][2]) / s;
+	} else {
+		const float s = std::sqrt(1.0f + m.m[2][2] - m.m[0][0] - m.m[1][1]) * 2.0f; // 4z
+		q.w = (m.m[0][1] - m.m[1][0]) / s;
+		q.x = (m.m[2][0] + m.m[0][2]) / s;
+		q.y = (m.m[2][1] + m.m[1][2]) / s;
+		q.z = 0.25f * s;
+	}
+	return Normalize(q);
+}
+
+Quaternion Calculation::MakeQuaternionFromEuler(const Vector3& euler) {
+	// MakeAffineMatrix と同じ順番（X → Y → Z）で回した行列から作る
+	return MakeQuaternionFromMatrix(MakeRotationXMatrix(euler.x) * MakeRotationYMatrix(euler.y) * MakeRotationZMatrix(euler.z));
+}
+
+Vector3 Calculation::MakeEulerFromQuaternion(const Quaternion& q) {
+	// 行列 Rx(a) * Ry(b) * Rz(c) の成分: m02 = -sin b、m12 / m22 = tan a、m01 / m00 = tan c
+	const Matrix4x4 m = MakeRotateMatrix(q);
+	const float sinY = std::clamp(-m.m[0][2], -1.0f, 1.0f);
+	Vector3 euler;
+	euler.y = std::asin(sinY);
+	if (std::abs(sinY) < 0.9999f) {
+		euler.x = std::atan2(m.m[1][2], m.m[2][2]);
+		euler.z = std::atan2(m.m[0][1], m.m[0][0]);
+	} else {
+		// 真上・真下を向いて X と Z の回転が区別できないときは、X を 0 にして Z にまとめる
+		euler.x = 0.0f;
+		euler.z = std::atan2(-m.m[1][0], m.m[1][1]);
+	}
+	return euler;
+}
+
+Vector3 Calculation::RotateVector(const Vector3& v, const Quaternion& q) {
+	// 行ベクトル × 回転行列（MakeRotateMatrix と同じ向きに回る）
+	const Matrix4x4 m = MakeRotateMatrix(q);
+	return {
+		v.x * m.m[0][0] + v.y * m.m[1][0] + v.z * m.m[2][0],
+		v.x * m.m[0][1] + v.y * m.m[1][1] + v.z * m.m[2][1],
+		v.x * m.m[0][2] + v.y * m.m[1][2] + v.z * m.m[2][2],
+	};
+}

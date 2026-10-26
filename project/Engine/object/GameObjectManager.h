@@ -100,6 +100,8 @@ private:
     void UpdatePhysics(const std::vector<GameObject*>& alive);
     // Rigidbody 1つを step 秒ぶん動かす
     void IntegrateBody(Rigidbody& body, float step) const;
+    // 回る物の向きを step 秒ぶん回す（transform.rotate にも書く）
+    void IntegrateRotation(Rigidbody& body, float step) const;
     // 当たり判定に渡す一覧（本リストのうち Destroy されていない物。非アクティブも含む）
     std::vector<GameObject*> CollectAliveObjects() const;
     // Destroy() された物の Finalize() を呼んで取り除く
@@ -126,8 +128,13 @@ private:
     // まだ計算していない時間（固定間隔に満たない端数）
     float physicsAccumulator = 0.0f;
     int lastPhysicsStepCount = 0;
-    // BeginRenderInterpolation 中に入れ替えた物と、元の位置
-    std::vector<std::pair<GameObject*, Vector3>> savedPhysicsPositions;
+    // BeginRenderInterpolation 中に入れ替えた物と、元の位置・回転
+    struct SavedTransform {
+        GameObject* object = nullptr;
+        Vector3 translate;
+        Vector3 rotate;
+    };
+    std::vector<SavedTransform> savedPhysicsPositions;
     // BeginRenderInterpolation の入れ子の深さ（シーンの Begin〜End の中で Draw が呼ばれても二重に入れ替えない）
     int renderInterpolationDepth = 0;
 

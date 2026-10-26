@@ -126,6 +126,43 @@ private:
     static float GetPushWeight(const Collider& collider);
     // ぶつかった2つの速度を変える（跳ね返り・摩擦）。normal は A を B から離す向き。Rigidbody が無い物は止まっている物として扱う
     void ResolveVelocity(GameObject* ownerA, GameObject* ownerB, const Vector3& normal) const;
+
+    // --- 回る物（Rigidbody::SetUseRotation）のぶつかり ---
+    // 当たっている点1つ分（速度を直す計算の途中の値も持つ）
+    struct ContactPoint {
+        Vector3 position = { 0.0f, 0.0f, 0.0f };
+        Vector3 offsetA = { 0.0f, 0.0f, 0.0f }; // A の中心から当たった点まで
+        Vector3 offsetB = { 0.0f, 0.0f, 0.0f };
+        float normalMass = 0.0f;                // 法線の向きに押したときの「動きにくさ」
+        float tangentMass[2] = { 0.0f, 0.0f };
+        float bounceSpeed = 0.0f;               // 跳ね返って欲しい速さ
+        float normalImpulse = 0.0f;             // ここまでに押した量（合計がマイナスにならないように）
+        float tangentImpulse[2] = { 0.0f, 0.0f };
+    };
+    // 回る物が混ざった組1つ分。normal は A を B から離す向き
+    struct Manifold {
+        PairKey key;
+        GameObject* ownerA = nullptr;
+        GameObject* ownerB = nullptr;
+        Vector3 normal = { 0.0f, 0.0f, 0.0f };
+        Vector3 tangents[2] = {};
+        float friction = 0.0f;
+        std::vector<ContactPoint> points;
+    };
+    // 片方でも回る物なら true（速度は ResolveVelocity ではなく SolveManifolds で直す）
+    static bool IsRotatingPair(const GameObject* ownerA, const GameObject* ownerB);
+    // 当たっている点を集める（箱の角・カプセルの両端・球の一番近い所のうち、相手に触れている物）
+    Manifold BuildManifold(const Collider& a, const Collider& b, const Vector3& normal, float depth) const;
+    // 集めた組の速度を、点ごとに何回か繰り返して直す（回転も含む。積んだ箱が崩れたり、転がったりする）
+    void SolveManifolds();
+    std::vector<Manifold> manifolds;
+    // 前のステップで点ごとに押した量（同じ所で当たり続けている点は、そこから始める = 積んだ物が沈まず安定する）
+    struct CachedImpulse {
+        Vector3 position = { 0.0f, 0.0f, 0.0f };
+        float normalImpulse = 0.0f;
+        float tangentImpulse[2] = { 0.0f, 0.0f };
+    };
+    std::unordered_map<PairKey, std::vector<CachedImpulse>, PairKeyHash> impulseCache;
     // normalForOwner が「上」向きに近ければ owner の Rigidbody を接地中にする
     void UpdateGrounded(GameObject* owner, const Vector3& normalForOwner) const;
     // 通知

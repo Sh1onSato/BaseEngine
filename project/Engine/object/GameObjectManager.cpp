@@ -1,4 +1,5 @@
 #include "GameObjectManager.h"
+#include "Calculation.h"
 #include "DebugDraw.h"
 #include "GameTime.h"
 #include <algorithm>
@@ -153,6 +154,14 @@ void GameObjectManager::UpdatePhysics(const std::vector<GameObject*>& alive) {
             body->hasPhysicsPosition = true;
             body->stepSmoothOffset = { 0.0f, 0.0f, 0.0f }; // ワープしたら段差の持ち上げ途中の見た目も捨てる
         }
+        // 回る物: 形と質量から回りやすさを決め、コードで向きを変えられていたら（初めても）その向きから始める
+        body->UpdateInertia();
+        if (body->useRotation && (!body->hasOrientation || !IsSamePosition(body->owner->transform.rotate, body->writtenRotation))) {
+            body->orientation = Calculation::MakeQuaternionFromEuler(body->owner->transform.rotate);
+            body->previousOrientation = body->orientation;
+            body->writtenRotation = body->owner->transform.rotate;
+            body->hasOrientation = true;
+        }
     }
 
     // たまった時間の分だけ固定間隔で計算する（重いフレームは複数回、速い PC では計算しないフレームもある）
@@ -163,6 +172,7 @@ void GameObjectManager::UpdatePhysics(const std::vector<GameObject*>& alive) {
     while (physicsAccumulator >= fixedTimeStep && steps < kMaxPhysicsStepsPerFrame) {
         for (Rigidbody* body : bodies) {
             body->previousPosition = body->owner->transform.translate;
+            body->previousOrientation = body->orientation;
             body->wasGrounded = body->isGrounded;
             body->isGrounded = false; // 当たり判定で地面に触れたら true になる
             IntegrateBody(*body, fixedTimeStep);
@@ -213,6 +223,43 @@ void GameObjectManager::IntegrateBody(Rigidbody& body, float step) const {
     if (body.freezeY) { body.velocity.y = 0.0f; }
     if (body.freezeZ) { body.velocity.z = 0.0f; }
     body.owner->transform.translate += body.velocity * step;
+    IntegrateRotation(body, step);
+}
+
+void GameObjectManager::IntegrateRotation(Rigidbody& body, float step) const {
+    if (!body.useRotation) {
+        return;
+    }
+    if (!body.isKinematic) {
+        // たまった回す力を、回りやすさに合わせて回転の速さに変える（回れない形なら回らない）
+        body.angularVelocity += body.ApplyInverseInertia(body.pendingAngularVelocityChange);
+        body.pendingAngularVelocityChange = { 0.0f, 0.0f, 0.0f };
+        if (!body.hasInertia) {
+            body.angularVelocity = { 0.0f, 0.0f, 0.0f };
+        }
+        if (body.angularDamping > 0.0f) {
+            body.angularVelocity = body.angularVelocity * (1.0f / (1.0f + body.angularDamping * step));
+        }
+    }
+    // キネマティックも angularVelocity どおりに回る（回る床など）
+    if (body.freezeRotationX) { body.angularVelocity.x = 0.0f; }
+    if (body.freezeRotationY) { body.angularVelocity.y = 0.0f; }
+    if (body.freezeRotationZ) { body.angularVelocity.z = 0.0f; }
+    const Vector3& w = body.angularVelocity;
+    if (w.x == 0.0f && w.y == 0.0f && w.z == 0.0f) {
+        return;
+    }
+    // 向きの変化 = 0.5 × (回転の速さ, 0) × 向き（ワールドの軸まわりの回転）
+    Quaternion& q = body.orientation;
+    const float half = 0.5f * step;
+    const Quaternion change = {
+        (w.x * q.w + w.y * q.z - w.z * q.y) * half,
+        (w.y * q.w + w.z * q.x - w.x * q.z) * half,
+        (w.z * q.w + w.x * q.y - w.y * q.x) * half,
+        (-w.x * q.x - w.y * q.y - w.z * q.z) * half,
+    };
+    q = Calculation::Normalize({ q.x + change.x, q.y + change.y, q.z + change.z, q.w + change.w });
+    body.WriteRotation();
 }
 
 void GameObjectManager::BeginRenderInterpolation() {
@@ -226,8 +273,13 @@ void GameObjectManager::BeginRenderInterpolation() {
         if (!body || object->IsDestroyed()) {
             continue;
         }
-        savedPhysicsPositions.emplace_back(object.get(), object->transform.translate);
+        savedPhysicsPositions.push_back({ object.get(), object->transform.translate, object->transform.rotate });
         object->transform.translate = body->GetRenderPosition();
+        // 回る物は向きも前のステップとの間をつなぐ
+        if (body->useRotation && body->interpolate && body->hasOrientation) {
+            object->transform.rotate =
+                Calculation::MakeEulerFromQuaternion(Calculation::Slerp(body->previousOrientation, body->orientation, body->renderAlpha));
+        }
     }
 }
 
@@ -236,8 +288,9 @@ void GameObjectManager::EndRenderInterpolation() {
     if (renderInterpolationDepth <= 0 || --renderInterpolationDepth > 0) {
         return;
     }
-    for (const auto& [object, position] : savedPhysicsPositions) {
-        object->transform.translate = position;
+    for (const SavedTransform& saved : savedPhysicsPositions) {
+        saved.object->transform.translate = saved.translate;
+        saved.object->transform.rotate = saved.rotate;
     }
     savedPhysicsPositions.clear();
 }

@@ -321,6 +321,9 @@
     <ClCompile Include="Engine\scene\TweenTestScene.cpp">
       <Filter>ソース ファイル\engine\scene</Filter>
     </ClCompile>
+    <ClCompile Include="Engine\scene\RigidbodyTestScene.cpp">
+      <Filter>ソース ファイル\engine\scene</Filter>
+    </ClCompile>
     <ClCompile Include="Engine\scene\PathfindTestScene.cpp">
       <Filter>ソース ファイル\engine\scene</Filter>
     </ClCompile>
@@ -707,6 +710,9 @@
       <Filter>ヘッダー ファイル\engine\scene</Filter>
     </ClInclude>
     <ClInclude Include="Engine\scene\TweenTestScene.h">
+      <Filter>ヘッダー ファイル\engine\scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\scene\RigidbodyTestScene.h">
       <Filter>ヘッダー ファイル\engine\scene</Filter>
     </ClInclude>
     <ClInclude Include="Engine\scene\PathfindTestScene.h">
