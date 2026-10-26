@@ -7,6 +7,7 @@
 #include "LevelTestScene.h"
 #include "InstancingTestScene.h"
 #include "PhysicsTestScene.h"
+#include "UITestScene.h"
 #include "Logger.h"
 #include <format>
 
@@ -44,6 +45,10 @@ BaseScene* SceneFactory::CreateScene(const std::string& sceneName) {
     else if (sceneName == "PHYSICS_TEST") {
         // 物理（Rigidbody・重力・跳ね返り・摩擦・接地・動く床・補間）の検証用シーン
         newScene = new PhysicsTestScene();
+    }
+    else if (sceneName == "UI_TEST") {
+        // UI（UICanvas・パネル・文字・ボタン・配置・クリック）の検証用シーン
+        newScene = new UITestScene();
     }
     else {
         // 該当なしの場合は無言でnullptrを返すと「シーンが何も更新・描画されない」という

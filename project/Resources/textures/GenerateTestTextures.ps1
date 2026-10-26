@@ -8,6 +8,9 @@ Camera2D / SpriteAnimation（Engine\2d\Camera2D.h, SpriteAnimation.h）の動作
                    0〜3コマ目を "idle"、4〜7コマ目を "spin" として再生する想定
 - test_grid.png  : 256x256のタイル状のグリッド（暗い背景、32pxごとに細い線、128pxごとに太い線）。
                    繰り返し(WRAP)で並べても継ぎ目が分からないようにしてある。ワールドの背景用
+- test_frame.png : 48x48の角の丸い枠（UIPanel::SetSlice(16) の9スライス確認用。UITestSceneで使う）。
+                   中は白（パネルの色がそのまま出る）、縁は灰色、四隅に小さな点。
+                   9スライスなら、どんな大きさにしても角の丸みと点が同じ大きさのまま出る
 
 このスクリプトはビルド対象外（.vcxprojに登録しない）。実行はユーザーまたは開発者が手動で行う。
     powershell -NoProfile -ExecutionPolicy Bypass -File .\Resources\textures\GenerateTestTextures.ps1
@@ -100,4 +103,40 @@ try {
 $grid.Save((Join-Path $outDir 'test_grid.png'), [System.Drawing.Imaging.ImageFormat]::Png)
 $grid.Dispose()
 
-Write-Host "生成しました: $outDir\test_sheet.png, $outDir\test_grid.png"
+# --- test_frame.png ---
+$frameTextureSize = 48
+$radius = 12
+$border = 3
+$frame = New-Object System.Drawing.Bitmap($frameTextureSize, $frameTextureSize, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb))
+$g = [System.Drawing.Graphics]::FromImage($frame)
+try {
+    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $g.Clear([System.Drawing.Color]::Transparent)
+    # 角の丸い四角の形
+    $path = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $d = $radius * 2
+    $max = $frameTextureSize - 1
+    $path.AddArc(0, 0, $d, $d, 180, 90)
+    $path.AddArc($max - $d, 0, $d, $d, 270, 90)
+    $path.AddArc($max - $d, $max - $d, $d, $d, 0, 90)
+    $path.AddArc(0, $max - $d, $d, $d, 90, 90)
+    $path.CloseFigure()
+    $g.FillPath([System.Drawing.Brushes]::White, $path)
+    $pen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(255, 120, 120, 120), $border)
+    $pen.Alignment = [System.Drawing.Drawing2D.PenAlignment]::Inset
+    $g.DrawPath($pen, $path)
+    # 四隅の点（端 16px の中に収まる位置）
+    $dot = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, 90, 90, 90))
+    foreach ($p in @(@(7, 7), @(($frameTextureSize - 11), 7), @(7, ($frameTextureSize - 11)), @(($frameTextureSize - 11), ($frameTextureSize - 11)))) {
+        $g.FillEllipse($dot, $p[0], $p[1], 4, 4)
+    }
+    $dot.Dispose()
+    $pen.Dispose()
+    $path.Dispose()
+} finally {
+    $g.Dispose()
+}
+$frame.Save((Join-Path $outDir 'test_frame.png'), [System.Drawing.Imaging.ImageFormat]::Png)
+$frame.Dispose()
+
+Write-Host "生成しました: $outDir\test_sheet.png, $outDir\test_grid.png, $outDir\test_frame.png"

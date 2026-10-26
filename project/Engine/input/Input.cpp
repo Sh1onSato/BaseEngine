@@ -75,6 +75,9 @@ void Input::Update() {
         mousePosition = Screen::ClientToGame({ static_cast<float>(cursor.x), static_cast<float>(cursor.y) });
     }
 
+    // --- 文字入力 ---
+    textInputEvents = winApp->TakeTextInputEvents();
+
     // --- コントローラー (XInput) ---
     bool pollDisconnected = disconnectedPollCounter <= 0;
     disconnectedPollCounter = pollDisconnected ? kDisconnectedPollInterval : disconnectedPollCounter - 1;

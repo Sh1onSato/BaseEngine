@@ -16,50 +16,88 @@ void ModelManager::Finalize() {
 	gltfModels.clear();
 }
 
-Model* ModelManager::LoadModel(const std::string& directoryPath, const std::string& filename) {
+std::shared_ptr<Model> ModelManager::LoadModel(const std::string& directoryPath, const std::string& filename) {
 	// すでにロード済みかチェック
 	std::string filePath = directoryPath + "/" + filename;
-	if (models.contains(filePath)) {
-		return models.at(filePath).get();
+	auto it = models.find(filePath);
+	if (it != models.end()) {
+		// 新しいシーンでも使われたので、シーン切り替えで解放されないようにする
+		it->second.sceneSerial = currentSceneSerial;
+		return it->second.data;
 	}
 
 	// 新しく生成して初期化
-	std::unique_ptr<Model> model = std::make_unique<Model>();
+	std::shared_ptr<Model> model = std::make_shared<Model>();
 	model->Initialize(dxCommon, directoryPath, filename);
 
 	// キャッシュに保存して返す
-	models[filePath] = std::move(model);
-	return models.at(filePath).get();
+	models[filePath] = { model, currentSceneSerial, false };
+	return model;
 }
 
-Model* ModelManager::GetCubeModel() {
+std::shared_ptr<Model> ModelManager::GetCubeModel() {
 	return GetPrimitiveModel("<primitive>/cube", PrimitiveMesh::BuildCube);
 }
 
-Model* ModelManager::GetSphereModel() {
+std::shared_ptr<Model> ModelManager::GetSphereModel() {
 	return GetPrimitiveModel("<primitive>/sphere", [] { return PrimitiveMesh::BuildSphere(16, 12); });
 }
 
-Model* ModelManager::GetPrimitiveModel(const std::string& key, const std::function<std::vector<VertexData>()>& buildVertices) {
-	// ファイルパスとは重ならない名前でキャッシュに入れる（Finalize で他のモデルと一緒に消える）
-	if (models.contains(key)) {
-		return models.at(key).get();
+std::shared_ptr<Model> ModelManager::GetPrimitiveModel(const std::string& key, const std::function<std::vector<VertexData>()>& buildVertices) {
+	// ファイルパスとは重ならない名前でキャッシュに入れる（解放はせず、Finalize で他のモデルと一緒に消える）
+	auto it = models.find(key);
+	if (it != models.end()) {
+		return it->second.data;
 	}
-	std::unique_ptr<Model> model = std::make_unique<Model>();
+	std::shared_ptr<Model> model = std::make_shared<Model>();
 	model->InitializeFromVertices(dxCommon, buildVertices(), "white");
-	models[key] = std::move(model);
-	return models.at(key).get();
+	models[key] = { model, currentSceneSerial, true };
+	return model;
 }
 
-GltfModelData* ModelManager::LoadGltfModel(const std::string& directoryPath, const std::string& filename) {
+std::shared_ptr<GltfModelData> ModelManager::LoadGltfModel(const std::string& directoryPath, const std::string& filename) {
 	// すでにロード済みかチェック
 	std::string filePath = directoryPath + "/" + filename;
-	if (gltfModels.contains(filePath)) {
-		return gltfModels.at(filePath).get();
+	auto it = gltfModels.find(filePath);
+	if (it != gltfModels.end()) {
+		it->second.sceneSerial = currentSceneSerial;
+		return it->second.data;
 	}
 
 	// 新しく読み込んでキャッシュに保存
-	std::unique_ptr<GltfModelData> gltfModel = std::make_unique<GltfModelData>(GltfLoader::LoadGltfFile(directoryPath, filename));
-	gltfModels[filePath] = std::move(gltfModel);
-	return gltfModels.at(filePath).get();
+	std::shared_ptr<GltfModelData> gltfModel = std::make_shared<GltfModelData>(GltfLoader::LoadGltfFile(directoryPath, filename));
+	gltfModels[filePath] = { gltfModel, currentSceneSerial, false };
+	return gltfModel;
+}
+
+void ModelManager::ReleaseUnused() {
+	isReleaseAllRequested = true;
+}
+
+void ModelManager::OnSceneChanged() {
+	++currentSceneSerial;
+	releaseBeforeSerial = currentSceneSerial;
+}
+
+void ModelManager::Update() {
+	ReleaseFrom(models);
+	ReleaseFrom(gltfModels);
+	isReleaseAllRequested = false;
+	releaseBeforeSerial = 0;
+}
+
+template <typename T>
+void ModelManager::ReleaseFrom(std::map<std::string, CacheEntry<T>>& cache) {
+	for (auto it = cache.begin(); it != cache.end();) {
+		const CacheEntry<T>& entry = it->second;
+		// use_count が 1 = キャッシュ以外に誰も持っていない
+		const bool isUnused = entry.data.use_count() == 1 && !entry.isPersistent;
+		const bool isFromPreviousScene = releaseBeforeSerial != 0 && entry.sceneSerial < releaseBeforeSerial;
+		if (isUnused && (isReleaseAllRequested || isFromPreviousScene)) {
+			// Model が消えると持っていた画像の使用数も減る（画像は TextureManager::Update で解放される）
+			it = cache.erase(it);
+		} else {
+			++it;
+		}
+	}
 }

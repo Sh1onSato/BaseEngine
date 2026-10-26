@@ -1,5 +1,8 @@
 #pragma once
+#include <cstdint>
 #include <string>
+#include <unordered_map>
+#include <vector>
 #include<d3d12.h>
 #include<dxgi1_6.h>
 #include<wrl.h> 
@@ -10,6 +13,43 @@
 
 using namespace StringUtility;
 
+/// <summary>
+/// TextureManager の画像を「使っている」印（参照カウント）。持っている間はその画像が解放されない。
+/// コピーすると数が増え、破棄・Reset すると減る。Sprite・Model・Skybox が中で持っているので、普段は意識しなくてよい。
+/// ゲーム側でシーンをまたいで残したい画像があれば、TextureManager::Acquire で受け取って持っておく（MarkPersistent でもよい）。
+/// </summary>
+class TextureHandle {
+public:
+	TextureHandle() = default;
+	~TextureHandle() { Reset(); }
+	TextureHandle(const TextureHandle& other);
+	TextureHandle& operator=(const TextureHandle& other);
+	TextureHandle(TextureHandle&& other) noexcept;
+	TextureHandle& operator=(TextureHandle&& other) noexcept;
+
+	bool IsValid() const { return index != kInvalidIndex; }
+	// テクスチャ番号（TextureManager の GetSrvHandleGPU などに渡す）
+	uint32_t GetIndex() const { return index; }
+	// 使うのをやめる
+	void Reset();
+
+private:
+	friend class TextureManager;
+	static constexpr uint32_t kInvalidIndex = UINT32_MAX;
+	// TextureManager が数を増やしてから渡す
+	explicit TextureHandle(uint32_t textureIndex) : index(textureIndex) {}
+
+	uint32_t index = kInvalidIndex;
+};
+
+/// テクスチャの読み込みと解放。
+/// 解放のしかた（参照カウント）:
+///   ・使っている物（TextureHandle。Sprite・Model・Skybox が持つ）が 0 になった画像は、すぐには消さない
+///   ・シーンが切り替わると、前のシーンまでに読まれて今のシーンで使われていない画像を、次のフレームの始めに解放する
+///     （新しいシーンの Initialize で LoadTexture・Sprite 作成をした画像は残るので、共通の画像は読み直さない）
+///   ・ReleaseUnused() を呼ぶと、使われていない画像を次のフレームの始めに全部解放する（重いシーンの途中で空けたいとき）
+///   ・CreateOrUpdateTexture で作った画像（Text の文字など）は、使う物が 0 になったら次のフレームの始めに解放する
+///   ・MarkPersistent した画像と "white"・"digitFont" は解放しない
 class TextureManager{
 public:
 	// 5x7ドットビットマップフォント 1文字分の定義（文字とビットパターンの対応）
@@ -98,6 +138,22 @@ public:
 	// 読み込み済みか
 	bool HasTexture(const std::string& filePath) const;
 
+	// 読み込み済み・作成済みの画像を使う印を受け取る（無ければ Fatal。先に LoadTexture する）
+	TextureHandle Acquire(const std::string& filePath);
+	// テクスチャ番号から使う印を受け取る
+	TextureHandle AcquireByIndex(uint32_t textureIndex);
+	// シーンが変わっても解放しない画像にする（タイトルからずっと使う UI の画像など）
+	void MarkPersistent(const std::string& filePath);
+	// 使われていない画像（永続を除く）を、次のフレームの始めに全部解放する
+	void ReleaseUnused();
+	// シーンが切り替わった（SceneManager が新しいシーンの Initialize の前に呼ぶ）
+	void OnSceneChanged();
+	// フレームの始めに呼ぶ（Framework）。解放を予約された画像を実際に解放する（前のフレームの描画は終わっているので安全）
+	void Update();
+
+	// 読み込んでいる画像の数（デバッグ表示用）
+	uint32_t GetLoadedCount() const;
+
 	uint32_t GetTextureIndexByFilePath(const std::string& filePath);
 	uint32_t GetSrvIndex(uint32_t textureIndex) const;
 	D3D12_GPU_DESCRIPTOR_HANDLE GetSrvHandleGPU(uint32_t textureIndex);
@@ -117,18 +173,43 @@ private:
 	TextureManager(TextureManager&) = delete;
 	TextureManager& operator = (TextureManager&) = delete;
 
+	friend class TextureHandle;
+
 	struct TextureData {
 		std::string filePath;
 		DirectX::TexMetadata metadata;
-		Microsoft::WRL::ComPtr<ID3D12Resource> resource;
+		Microsoft::WRL::ComPtr<ID3D12Resource> resource; // nullptr なら空き（解放済み）
 		uint32_t srvIndex;
+		uint32_t refCount = 0;
+		// CreateOrUpdateTexture で作った（ファイルから読み直せない。使う物が 0 になったらすぐ解放）
+		bool isDynamic = false;
+		bool isPersistent = false;
+		// 最後に読み込み・Acquire されたシーンの番号（シーン切り替え時の解放の判定用）
+		uint64_t sceneSerial = 0;
 	};
+	// 番号（添字）は解放しても変わらない。解放した場所は freeSlots に入れて使い回す
 	std::vector<TextureData> textureDatas;
+	std::vector<uint32_t> freeSlots;
+	std::unordered_map<std::string, uint32_t> indexByPath;
+
+	// 今のシーンの番号（OnSceneChanged で増える）
+	uint64_t currentSceneSerial = 0;
+	// この番号より前のシーンで使われた、使う物 0 の画像を次の Update で解放する（0 なら予約なし）
+	uint64_t releaseBeforeSerial = 0;
+	bool isReleaseAllRequested = false;
+
+	// 名前の画像の場所を確保して SRV 番号を取る（中身は呼んだ側が作る）
+	uint32_t AllocateSlot(const std::string& name);
+	// 見つからなければ kNotFound
+	static constexpr uint32_t kNotFound = UINT32_MAX;
+	uint32_t FindIndex(const std::string& filePath) const;
+	// 読み込まれている番号か確認する（解放済みなら Fatal）
+	const TextureData& GetLoadedData(uint32_t textureIndex) const;
+	void AddRef(uint32_t textureIndex);
+	void Release(uint32_t textureIndex);
+	void ReleaseSlot(uint32_t textureIndex);
 
 	// コマンドリストを閉じて実行し、GPUの完了を待ってから次のフレーム用にリセットする（テクスチャ転送用）
 	void ExecuteUploadAndWait();
-
-
-	
 };
 

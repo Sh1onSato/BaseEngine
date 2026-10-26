@@ -49,8 +49,8 @@ private:
 
     // CameraManager が持ち主なので借りるだけ
     Camera* camera = nullptr;
-    // ModelManager が持ち主なので借りるだけ
-    Model* cubeModel = nullptr;
+    // ModelManager のキャッシュと共有する
+    std::shared_ptr<Model> cubeModel;
 
     ModelInstancer instancer;
     std::vector<std::unique_ptr<Object3d>> individualObjects;

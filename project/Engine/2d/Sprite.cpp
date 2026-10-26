@@ -15,9 +15,10 @@ void Sprite::Initialize(SpriteCommon* spriteCommon, std::string textureFilePath)
     this->spriteCommon = spriteCommon;
     this->dxCommon = spriteCommon->GetDxCommon();
     // 単位行列を書き込んでおく
-    textureIndex = TextureManager::GetInstance()->GetTextureIndexByFilePath(textureFilePath);
+    texture = TextureManager::GetInstance()->Acquire(textureFilePath);
+    const uint32_t textureIndex = texture.GetIndex();
     // Commonに「住所を教えて！」と頼んで、自分の中にメモ（変数）しておく
-    this->textureSrvHandleGPU = spriteCommon->GetTextureHandle(textureIndex);
+    this->textureSrvHandleGPU = spriteCommon->GetTextureHandle(TextureManager::GetInstance()->GetSrvIndex(textureIndex));
     this->name = textureFilePath; // メンバ変数にファイル名を保存しておく
     // 1. 頂点リソースの設定 (4頂点分でOK)
     vertexResourceSprite = dxCommon->CreatBufferResource(sizeof(SpriteVertex) * 4);
@@ -106,7 +107,7 @@ void Sprite::Update() {
         bottom = -bottom;
     }
     //
-    const DirectX::TexMetadata& metadate = TextureManager::GetInstance()->GetMetadata(textureIndex);
+    const DirectX::TexMetadata& metadate = TextureManager::GetInstance()->GetMetadata(texture.GetIndex());
     float tex_left = texLeftTop.x / static_cast<float>(metadate.width);
     float tex_right = (texLeftTop.x + texSize.x) / static_cast<float>(metadate.width);
     float tex_top = texLeftTop.y / static_cast<float>(metadate.height);
@@ -131,7 +132,7 @@ void Sprite::Update() {
 }
 
 void Sprite::Draw() {
-    Draw(this->textureIndex);
+    Draw(texture.GetIndex());
 }
 
 void Sprite::Draw(uint32_t textureIndex) {
@@ -232,7 +233,7 @@ void Sprite::ImGui(){
 }
 
 void Sprite::AdjustTextureSize(){
-	const DirectX::TexMetadata& metadate = TextureManager::GetInstance()->GetMetadata(textureIndex);
+	const DirectX::TexMetadata& metadate = TextureManager::GetInstance()->GetMetadata(texture.GetIndex());
     texSize.x = static_cast<float>(metadate.width);
 	texSize.y = static_cast<float>(metadate.height);
     // 画像サイズをテクスチャサイズに合わせる

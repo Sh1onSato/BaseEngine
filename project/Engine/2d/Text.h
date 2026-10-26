@@ -25,6 +25,19 @@ public:
         kRight,
     };
 
+    // 文字画像の周りの余白(px)。文字の左上は画像の左上から (kPadding, kPadding) の位置
+    static constexpr int kPadding = 2;
+
+    // 1行の文字列を測った結果（文字入力欄のカーソル位置用）
+    struct LineMetrics {
+        // 文字の境目の x(px)。[0] は先頭（0）、[i] は i 文字目の後ろ。要素数は UTF-16 の文字数 + 1
+        std::vector<float> caretPositions;
+        // 行の高さ(px)
+        float lineHeight = 0.0f;
+    };
+    // 改行を含まない文字列を、Text と同じフォントで描いたときの大きさを測る（GDI を使うので毎フレームは呼ばない）
+    static LineMetrics MeasureLine(const std::string& text, const std::wstring& fontName, float fontSize, bool bold = false);
+
     Text();
     ~Text();
 

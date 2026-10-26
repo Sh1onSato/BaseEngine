@@ -7,7 +7,7 @@ void Skybox::Initialize(SkyboxCommon* common, const std::string& textureFilePath
 
     // テクスチャの読み込み
     TextureManager::GetInstance()->LoadTexture(textureFilePath);
-    textureIndex = TextureManager::GetInstance()->GetTextureIndexByFilePath(textureFilePath);
+    texture = TextureManager::GetInstance()->Acquire(textureFilePath);
 
     // 定数バッファの作成
     wvpResource = common->GetDxCommon()->CreatBufferResource(sizeof(TransformationMatrix));
@@ -45,7 +45,7 @@ void Skybox::Draw() {
     // 定数バッファのセット (b0)
     commandList->SetGraphicsRootConstantBufferView(0, wvpResource->GetGPUVirtualAddress());
     // テクスチャのセット (t0)
-    commandList->SetGraphicsRootDescriptorTable(1, TextureManager::GetInstance()->GetSrvHandleGPU(textureIndex));
+    commandList->SetGraphicsRootDescriptorTable(1, TextureManager::GetInstance()->GetSrvHandleGPU(texture.GetIndex()));
 
     // モデルの頂点バッファをセットして描画
     D3D12_VERTEX_BUFFER_VIEW vbv = model->GetVertexBufferView();

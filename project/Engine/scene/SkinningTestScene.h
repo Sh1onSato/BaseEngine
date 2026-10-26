@@ -34,6 +34,6 @@ private:
     // CameraManagerが所有するため非所有ポインタ
     Camera* camera = nullptr;
 
-    // ModelManagerがキャッシュとして所有するため非所有ポインタ（Finalizeで解放してはいけない）
-    GltfModelData* gltfData = nullptr;
+    // ModelManagerのキャッシュと共有する（持っている間は解放されない）
+    std::shared_ptr<GltfModelData> gltfData;
 };

@@ -1,5 +1,7 @@
 #include "SrvManager.h"
 #include "Logger.h"
+#include <algorithm>
+#include <cassert>
 #include <format>
 
 void SrvManager::Initialize(DirectXCommon* dxCommon) {
@@ -12,6 +14,11 @@ void SrvManager::Initialize(DirectXCommon* dxCommon) {
 }
 
 uint32_t SrvManager::Allocate() {
+    if (!freeIndices.empty()) {
+        uint32_t index = freeIndices.back();
+        freeIndices.pop_back();
+        return index;
+    }
     // 上限チェック（超えるとヒープ外に書き込んで表示が壊れるのでReleaseでも止める）
     if (useCount >= kMaxSRVCount) {
         Logger::Fatal(std::format("SrvManager: SRV heap is full (kMaxSRVCount={})", kMaxSRVCount));
@@ -20,6 +27,12 @@ uint32_t SrvManager::Allocate() {
     uint32_t index = useCount;
     useCount++;
     return index;
+}
+
+void SrvManager::Free(uint32_t index) {
+    assert(index < useCount && "SrvManager: Allocate していない番号を Free しています");
+    assert(std::find(freeIndices.begin(), freeIndices.end(), index) == freeIndices.end() && "SrvManager: 同じ番号を2回 Free しています");
+    freeIndices.push_back(index);
 }
 
 D3D12_CPU_DESCRIPTOR_HANDLE SrvManager::GetCPUDescriptorHandle(uint32_t index) {

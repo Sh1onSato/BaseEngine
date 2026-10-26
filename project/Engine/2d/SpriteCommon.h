@@ -8,6 +8,7 @@
 
 class Sprite;
 class Camera2D;
+struct Rect;
 
 // スプライト共通部
 // 【描画の流れ（レイヤー対応）】
@@ -29,6 +30,12 @@ public:
 	void Enqueue(Sprite* sprite, uint32_t srvIndex);
 	// 積まれたスプライトをレイヤー順に描画してキューを空にする
 	void Flush();
+
+	// 描く範囲を矩形（ゲーム座標）の中だけにする（スクロールリストの外にはみ出た部分を描かない用）。
+	// Push してから Pop するまでに Draw したスプライトに効く（Flush の時点ではなく Draw を呼んだ時点の範囲）。
+	// 入れ子にすると、重なった部分だけになる。Push と Pop は必ず同じ数だけ呼ぶこと
+	void PushClipRect(const Rect& rect);
+	void PopClipRect();
 
 	// ブレンドモードを切り替える（現在と同じなら何もしない）
 	void SetBlendMode(SpriteBlendMode mode);
@@ -83,7 +90,11 @@ private:
 		uint32_t srvIndex; // 使うテクスチャのSRVインデックス
 		int layer;         // 積んだ時点のレイヤー
 		uint32_t order;    // 積んだ順番（デバッグ用）
+		bool hasClip;      // 積んだ時点で PushClipRect されていたか
+		D3D12_RECT clipRect; // そのときの描く範囲（バックバッファのピクセル）
 	};
+	// PushClipRect された範囲（バックバッファのピクセル。後ろほど内側で、外側と重なった部分にしてある）
+	std::vector<D3D12_RECT> clipStack;
 	// 描画キュー
 	std::vector<DrawRequest> drawQueue;
 	// 積んだ順番のカウンタ（Flushでリセット）

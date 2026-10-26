@@ -8,7 +8,7 @@
 
 void ParticleManager::Initialize(ParticleCommon* common, uint32_t textureIndex, ParticleDrawType drawType) {
     this->common = common;
-    this->textureIndex = textureIndex;
+    this->texture = TextureManager::GetInstance()->AcquireByIndex(textureIndex);
     this->drawType = drawType;
 
     // 1. インスタンシング用リソースの作成 (StructuredBuffer)
@@ -291,9 +291,8 @@ void ParticleManager::Draw() {
     // StructuredBuffer (t0) をセット
     commandList->SetGraphicsRootShaderResourceView(0, instancingResource->GetGPUVirtualAddress());
 
-    // テクスチャ (t1) をセット (Framework経由でSrvManagerを取得)
-    SrvManager* srvManager = Framework::GetInstance()->GetSrvManager();
-    D3D12_GPU_DESCRIPTOR_HANDLE textureHandle = srvManager->GetGPUDescriptorHandle(textureIndex);
+    // テクスチャ (t1) をセット（テクスチャ番号と SRV 番号は別物なので TextureManager に聞く）
+    D3D12_GPU_DESCRIPTOR_HANDLE textureHandle = TextureManager::GetInstance()->GetSrvHandleGPU(texture.GetIndex());
     commandList->SetGraphicsRootDescriptorTable(1, textureHandle);
 
     // 描画タイプに応じた頂点数でインスタンシング描画

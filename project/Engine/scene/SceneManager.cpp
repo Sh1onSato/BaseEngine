@@ -3,6 +3,8 @@
 #include "SpriteCommon.h"
 #include "GameTime.h"
 #include "Screen.h"
+#include "TextureManager.h"
+#include "ModelManager.h"
 #include <algorithm>
 
 SceneManager::SceneManager() = default;
@@ -23,9 +25,13 @@ void SceneManager::SwapScene() {
         currentScene->Finalize();
     }
 
-    // シーンの差し替え
+    // シーンの差し替え（ここで旧シーンが消え、旧シーンの Sprite などが持っていた画像の使用数が減る）
     currentScene = std::move(nextScene);
     nextScene = nullptr;
+
+    // 旧シーンまでに読んだモデルと画像のうち、新シーンの Initialize で使われなかった物を次のフレームの始めに解放する
+    ModelManager::GetInstance()->OnSceneChanged();
+    TextureManager::GetInstance()->OnSceneChanged();
 
     if (currentScene) {
         // 次のシーンに自分（マネージャ）を教える

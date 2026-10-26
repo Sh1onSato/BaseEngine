@@ -12,8 +12,42 @@
 namespace {
     // テクスチャ名の重複を避けるための通し番号
     uint32_t textInstanceCounter = 0;
-    // 文字の縁がテクスチャ端で切れないようにする余白(px)
-    constexpr int kPadding = 2;
+    HFONT CreateGdiFont(const std::wstring& fontName, float fontSize, bool bold) {
+        return CreateFontW(
+            -static_cast<int>(std::lround(fontSize)), 0, 0, 0,
+            bold ? FW_BOLD : FW_NORMAL, FALSE, FALSE, FALSE,
+            DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
+            ANTIALIASED_QUALITY, // ClearTypeだと文字の縁に色が付くので、グレースケールのアンチエイリアスにする
+            DEFAULT_PITCH | FF_DONTCARE, fontName.c_str());
+    }
+}
+
+Text::LineMetrics Text::MeasureLine(const std::string& lineText, const std::wstring& lineFontName, float lineFontSize, bool lineBold) {
+    const std::wstring wideText = StringUtility::ConvertString(lineText);
+    HDC dc = CreateCompatibleDC(nullptr);
+    HFONT font = CreateGdiFont(lineFontName, lineFontSize, lineBold);
+    HGDIOBJ oldFont = SelectObject(dc, font);
+
+    LineMetrics result;
+    TEXTMETRICW metrics{};
+    GetTextMetricsW(dc, &metrics);
+    result.lineHeight = static_cast<float>(metrics.tmHeight);
+
+    result.caretPositions.assign(wideText.size() + 1, 0.0f);
+    if (!wideText.empty()) {
+        // 先頭から i+1 文字目までの幅が extents[i] に入る
+        std::vector<int> extents(wideText.size());
+        SIZE size{};
+        GetTextExtentExPointW(dc, wideText.c_str(), static_cast<int>(wideText.size()), 0, nullptr, extents.data(), &size);
+        for (size_t i = 0; i < extents.size(); ++i) {
+            result.caretPositions[i + 1] = static_cast<float>(extents[i]);
+        }
+    }
+
+    SelectObject(dc, oldFont);
+    DeleteObject(font);
+    DeleteDC(dc);
+    return result;
 }
 
 Text::Text() = default;
@@ -91,12 +125,7 @@ void Text::Rebuild() {
     }
 
     HDC dc = CreateCompatibleDC(nullptr);
-    HFONT font = CreateFontW(
-        -static_cast<int>(std::lround(fontSize)), 0, 0, 0,
-        bold ? FW_BOLD : FW_NORMAL, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
-        ANTIALIASED_QUALITY, // ClearTypeだと文字の縁に色が付くので、グレースケールのアンチエイリアスにする
-        DEFAULT_PITCH | FF_DONTCARE, fontName.c_str());
+    HFONT font = CreateGdiFont(fontName, fontSize, bold);
     HGDIOBJ oldFont = SelectObject(dc, font);
 
     UINT alignFlag = align == Align::kCenter ? DT_CENTER : (align == Align::kRight ? DT_RIGHT : DT_LEFT);

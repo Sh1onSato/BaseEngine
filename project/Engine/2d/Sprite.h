@@ -2,6 +2,7 @@
 #include"Structs.h"
 #include"SpriteBlendMode.h"
 #include "WinApp.h"
+#include "TextureManager.h"
 #include <d3d12.h>
 #include <wrl.h>
 class SpriteCommon;
@@ -97,8 +98,8 @@ private:
 
 	// --- 数値を直接打たずに変数で管理する ---
 	Vector2 size = { 640.0f, 360.0f };
-	// テクスチャ番号
-	uint32_t textureIndex = 0;
+	// 使っているテクスチャ（持っている間は解放されない）
+	TextureHandle texture;
 	// デバッグ用にファイル名を保存しておく変数
 	std::string name;
 

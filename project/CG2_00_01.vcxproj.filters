@@ -46,6 +46,9 @@
     <Filter Include="ソース ファイル\engine\object">
       <UniqueIdentifier>{5d3f8a21-7c4e-4b9a-9e61-2f0c8d7b4a13}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ソース ファイル\engine\ui">
+      <UniqueIdentifier>{3c7e1f52-9a84-4d6b-b2e0-71f5a8c4d913}</UniqueIdentifier>
+    </Filter>
     <Filter Include="ソース ファイル\application">
       <UniqueIdentifier>{83b8ce44-52f8-4801-832d-13124732b5fd}</UniqueIdentifier>
     </Filter>
@@ -75,6 +78,9 @@
     </Filter>
     <Filter Include="ヘッダー ファイル\engine\object">
       <UniqueIdentifier>{a8e2c4f7-3b61-4d0e-8f95-6c1b7e9d2a54}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\engine\ui">
+      <UniqueIdentifier>{8d2b6a07-4e19-4c3f-9a58-e6b1c0f7d284}</UniqueIdentifier>
     </Filter>
     <Filter Include="ヘッダー ファイル\application">
       <UniqueIdentifier>{2f64137e-d850-4408-bec5-eea09761a58a}</UniqueIdentifier>
@@ -141,8 +147,8 @@
     <ClCompile Include="Engine\2d\BitmapText.cpp">
       <Filter>ソース ファイル\engine\2d</Filter>
     </ClCompile>
-    <ClCompile Include="Engine\2d\SettingsMenu.cpp">
-      <Filter>ソース ファイル\engine\2d</Filter>
+    <ClCompile Include="Engine\ui\SettingsMenu.cpp">
+      <Filter>ソース ファイル\engine\ui</Filter>
     </ClCompile>
     <ClCompile Include="Engine\base\StringUtility.cpp">
       <Filter>ソース ファイル\engine\base</Filter>
@@ -278,6 +284,42 @@
     </ClCompile>
     <ClCompile Include="Engine\object\Rigidbody.cpp">
       <Filter>ソース ファイル\engine\object</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\scene\UITestScene.cpp">
+      <Filter>ソース ファイル\engine\scene</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ui\UIElement.cpp">
+      <Filter>ソース ファイル\engine\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ui\UICanvas.cpp">
+      <Filter>ソース ファイル\engine\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ui\UIPanel.cpp">
+      <Filter>ソース ファイル\engine\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ui\UILabel.cpp">
+      <Filter>ソース ファイル\engine\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ui\UIButton.cpp">
+      <Filter>ソース ファイル\engine\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ui\UILayoutGroup.cpp">
+      <Filter>ソース ファイル\engine\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ui\UISlider.cpp">
+      <Filter>ソース ファイル\engine\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ui\UIToggle.cpp">
+      <Filter>ソース ファイル\engine\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ui\UIProgressBar.cpp">
+      <Filter>ソース ファイル\engine\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ui\UIScrollView.cpp">
+      <Filter>ソース ファイル\engine\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\ui\UITextInput.cpp">
+      <Filter>ソース ファイル\engine\ui</Filter>
     </ClCompile>
     <ClCompile Include="Engine\3d\CameraManager.cpp">
       <Filter>ソース ファイル\engine\3d</Filter>
@@ -418,8 +460,8 @@
     <ClInclude Include="Engine\2d\BitmapText.h">
       <Filter>ヘッダー ファイル\engine\2d</Filter>
     </ClInclude>
-    <ClInclude Include="Engine\2d\SettingsMenu.h">
-      <Filter>ヘッダー ファイル\engine\2d</Filter>
+    <ClInclude Include="Engine\ui\SettingsMenu.h">
+      <Filter>ヘッダー ファイル\engine\ui</Filter>
     </ClInclude>
     <ClInclude Include="Engine\2d\SpriteCommon.h">
       <Filter>ヘッダー ファイル\engine\2d</Filter>
@@ -555,6 +597,42 @@
     </ClInclude>
     <ClInclude Include="Engine\object\Rigidbody.h">
       <Filter>ヘッダー ファイル\engine\object</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\scene\UITestScene.h">
+      <Filter>ヘッダー ファイル\engine\scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ui\UIElement.h">
+      <Filter>ヘッダー ファイル\engine\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ui\UICanvas.h">
+      <Filter>ヘッダー ファイル\engine\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ui\UIPanel.h">
+      <Filter>ヘッダー ファイル\engine\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ui\UILabel.h">
+      <Filter>ヘッダー ファイル\engine\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ui\UIButton.h">
+      <Filter>ヘッダー ファイル\engine\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ui\UILayoutGroup.h">
+      <Filter>ヘッダー ファイル\engine\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ui\UISlider.h">
+      <Filter>ヘッダー ファイル\engine\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ui\UIToggle.h">
+      <Filter>ヘッダー ファイル\engine\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ui\UIProgressBar.h">
+      <Filter>ヘッダー ファイル\engine\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ui\UIScrollView.h">
+      <Filter>ヘッダー ファイル\engine\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\ui\UITextInput.h">
+      <Filter>ヘッダー ファイル\engine\ui</Filter>
     </ClInclude>
     <ClInclude Include="Engine\3d\CameraManager.h">
       <Filter>ヘッダー ファイル\engine\3d</Filter>

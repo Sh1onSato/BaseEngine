@@ -46,7 +46,7 @@ void SkinningTestScene::Initialize() {
     CameraManager::GetInstance()->SetActiveCamera("default");
 
     // --- glTFモデル読み込み(2ジョイントの棒。joint1のRotationアニメーション1本、t=0→0.5→1.0でループ) ---
-    // ModelManagerがGltfModelDataの所有権を持つキャッシュなので、ここでは非所有ポインタとして受け取るだけでよい
+    // ModelManagerのキャッシュと共有する（このシーンとbarObjectが持っている間は解放されない）
     gltfData = ModelManager::GetInstance()->LoadGltfModel("Resources/gltf", "TestArm_embedded.gltf");
 
     // テスト用glTFにはテクスチャ画像が無いため textureFilePath は空文字列になる。
@@ -76,7 +76,7 @@ void SkinningTestScene::Initialize() {
 void SkinningTestScene::Finalize() {
     CameraManager::GetInstance()->Initialize();
     camera = nullptr;
-    gltfData = nullptr; // ModelManagerのキャッシュが所有しているため、ここでは解放しない
+    gltfData = nullptr; // 手放すだけ（誰も持っていなければ、シーン切り替えの後に ModelManager が解放する）
 }
 
 void SkinningTestScene::Update() {

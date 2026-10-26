@@ -1,6 +1,10 @@
 #include "WinApp.h"
+#include "StringUtility.h"
 #include <cassert>
+#include <imm.h>
 #include"externals/imgui/imgui.h"
+
+#pragma comment(lib, "imm32.lib")
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 WinApp* WinApp::instance = nullptr;
@@ -87,6 +91,14 @@ LRESULT CALLBACK WinApp::WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
 		if (wParam == VK_F11 && !(lParam & (1 << 30)) && instance) {
 			instance->ToggleFullscreen();
 			return 0;
+		}
+		if (instance) {
+			instance->OnKeyDownMessage(wParam);
+		}
+		break;
+	case WM_CHAR:
+		if (instance) {
+			instance->OnCharMessage(wParam);
 		}
 		break;
 	case WM_SYSCHAR:
@@ -212,6 +224,77 @@ void WinApp::SetClientSize(uint32_t width, uint32_t height) {
 void WinApp::GetWindowedClientSize(uint32_t& width, uint32_t& height) const {
 	width = windowedClientWidth;
 	height = windowedClientHeight;
+}
+
+void WinApp::OnCharMessage(WPARAM wParam) {
+	const wchar_t code = static_cast<wchar_t>(wParam);
+	using Type = TextInputEvent::Type;
+	// 文字ではないキー（Ctrl+V などは制御文字として届く）
+	switch (code) {
+	case 0x08: pendingTextInput.push_back({ Type::kBackspace }); return;
+	case 0x0D: pendingTextInput.push_back({ Type::kEnter }); return;
+	case 0x1B: pendingTextInput.push_back({ Type::kEscape }); return;
+	case 0x16: pendingTextInput.push_back({ Type::kPaste }); return;
+	}
+	if (code < 0x20 || code == 0x7F) {
+		return; // ほかの制御文字（Tab・Ctrl+Backspace など）は使わない
+	}
+	// 2つで1文字になる文字は、2つ目が来てからまとめる
+	if (code >= 0xD800 && code <= 0xDBFF) {
+		pendingHighSurrogate = code;
+		return;
+	}
+	char32_t character = code;
+	if (code >= 0xDC00 && code <= 0xDFFF) {
+		if (pendingHighSurrogate == 0) {
+			return;
+		}
+		character = 0x10000 + ((static_cast<char32_t>(pendingHighSurrogate) - 0xD800) << 10) + (code - 0xDC00);
+	}
+	pendingHighSurrogate = 0;
+	pendingTextInput.push_back({ Type::kCharacter, character });
+}
+
+void WinApp::OnKeyDownMessage(WPARAM wParam) {
+	// 文字にならないキーは WM_CHAR が来ないのでここで拾う（押しっぱなしの繰り返しも来る）
+	using Type = TextInputEvent::Type;
+	switch (wParam) {
+	case VK_DELETE: pendingTextInput.push_back({ Type::kDelete }); break;
+	case VK_LEFT: pendingTextInput.push_back({ Type::kLeft }); break;
+	case VK_RIGHT: pendingTextInput.push_back({ Type::kRight }); break;
+	case VK_HOME: pendingTextInput.push_back({ Type::kHome }); break;
+	case VK_END: pendingTextInput.push_back({ Type::kEnd }); break;
+	}
+}
+
+std::vector<TextInputEvent> WinApp::TakeTextInputEvents() {
+	std::vector<TextInputEvent> events;
+	events.swap(pendingTextInput);
+	return events;
+}
+
+void WinApp::SetImeEnabled(bool enabled) {
+	if (enabled == isImeEnabled) {
+		return;
+	}
+	isImeEnabled = enabled;
+	// nullptr の入力コンテキストを結び付けると IME が使えなくなる。IACE_DEFAULT で元に戻る
+	ImmAssociateContextEx(hwnd, nullptr, enabled ? IACE_DEFAULT : 0);
+}
+
+std::string WinApp::GetClipboardText() const {
+	std::string result;
+	if (!IsClipboardFormatAvailable(CF_UNICODETEXT) || !OpenClipboard(hwnd)) {
+		return result;
+	}
+	if (HANDLE data = GetClipboardData(CF_UNICODETEXT)) {
+		if (const wchar_t* text = static_cast<const wchar_t*>(GlobalLock(data))) {
+			result = StringUtility::ConvertString(std::wstring(text));
+			GlobalUnlock(data);
+		}
+	}
+	CloseClipboard();
+	return result;
 }
 
 void WinApp::SetTitle(const std::wstring& title) {

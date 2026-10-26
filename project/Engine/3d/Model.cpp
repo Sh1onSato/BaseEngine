@@ -7,14 +7,19 @@ void Model::Initialize(DirectXCommon* dxCommon, const std::string& directoryPath
 	modelData = LoadObjFile(directoryPath, filename);
 	if (modelData.material.textureFilePath.size() > 0) {
 		TextureManager::GetInstance()->LoadTexture(modelData.material.textureFilePath);
+	} else {
+		modelData.material.textureFilePath = "white"; // mtl に画像が無ければ白（色は Object3d::SetColor で付ける）
 	}
+	texture = TextureManager::GetInstance()->Acquire(modelData.material.textureFilePath);
 
 	CreateVertexBuffer(dxCommon);
 }
 
 void Model::InitializeFromVertices(DirectXCommon* dxCommon, const std::vector<VertexData>& vertices, const std::string& textureFilePath) {
 	modelData.vertices = vertices;
-	modelData.material.textureFilePath = textureFilePath;
+	modelData.material.textureFilePath = textureFilePath.empty() ? "white" : textureFilePath;
+	// 画像は読み込まない（読み込み済みの物を使う）
+	texture = TextureManager::GetInstance()->Acquire(modelData.material.textureFilePath);
 
 	CreateVertexBuffer(dxCommon);
 }
@@ -38,8 +43,7 @@ void Model::CreateVertexBuffer(DirectXCommon* dxCommon) {
 void Model::Draw(ID3D12GraphicsCommandList* commandList, UINT instanceCount) {
 	// 描画コマンドの発行
 	commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
-	uint32_t textureIndex = TextureManager::GetInstance()->GetTextureIndexByFilePath(modelData.material.textureFilePath);
-	commandList->SetGraphicsRootDescriptorTable(2, TextureManager::GetInstance()->GetSrvHandleGPU(textureIndex));
+	commandList->SetGraphicsRootDescriptorTable(2, TextureManager::GetInstance()->GetSrvHandleGPU(texture.GetIndex()));
 	commandList->DrawInstanced(UINT(modelData.vertices.size()), instanceCount, 0, 0);
 
 }

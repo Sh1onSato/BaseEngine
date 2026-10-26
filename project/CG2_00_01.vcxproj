@@ -83,7 +83,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <TreatWarningAsError>true</TreatWarningAsError>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)Engine\2d;$(ProjectDir)Engine\3d;$(ProjectDir)Engine\audio;$(ProjectDir)Engine\base;$(ProjectDir)Engine\input;$(ProjectDir)Engine\math;$(ProjectDir)Engine\object;$(ProjectDir)Engine\scene;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)Engine\2d;$(ProjectDir)Engine\3d;$(ProjectDir)Engine\audio;$(ProjectDir)Engine\base;$(ProjectDir)Engine\input;$(ProjectDir)Engine\math;$(ProjectDir)Engine\object;$(ProjectDir)Engine\scene;$(ProjectDir)Engine\ui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
     </ClCompile>
     <Link>
@@ -111,7 +111,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)Engine\2d;$(ProjectDir)Engine\3d;$(ProjectDir)Engine\audio;$(ProjectDir)Engine\base;$(ProjectDir)Engine\input;$(ProjectDir)Engine\math;$(ProjectDir)Engine\object;$(ProjectDir)Engine\scene;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)Engine\2d;$(ProjectDir)Engine\3d;$(ProjectDir)Engine\audio;$(ProjectDir)Engine\base;$(ProjectDir)Engine\input;$(ProjectDir)Engine\math;$(ProjectDir)Engine\object;$(ProjectDir)Engine\scene;$(ProjectDir)Engine\ui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -140,7 +140,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <Optimization>Disabled</Optimization>
       <WholeProgramOptimization>false</WholeProgramOptimization>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)Engine\2d;$(ProjectDir)Engine\3d;$(ProjectDir)Engine\audio;$(ProjectDir)Engine\base;$(ProjectDir)Engine\input;$(ProjectDir)Engine\math;$(ProjectDir)Engine\object;$(ProjectDir)Engine\scene;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)Engine\2d;$(ProjectDir)Engine\3d;$(ProjectDir)Engine\audio;$(ProjectDir)Engine\base;$(ProjectDir)Engine\input;$(ProjectDir)Engine\math;$(ProjectDir)Engine\object;$(ProjectDir)Engine\scene;$(ProjectDir)Engine\ui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -192,6 +192,18 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="Engine\object\LevelSpawner.cpp" />
     <ClCompile Include="Engine\object\ModelObject.cpp" />
     <ClCompile Include="Engine\object\Rigidbody.cpp" />
+    <ClCompile Include="Engine\scene\UITestScene.cpp" />
+    <ClCompile Include="Engine\ui\UIElement.cpp" />
+    <ClCompile Include="Engine\ui\UICanvas.cpp" />
+    <ClCompile Include="Engine\ui\UIPanel.cpp" />
+    <ClCompile Include="Engine\ui\UILabel.cpp" />
+    <ClCompile Include="Engine\ui\UIButton.cpp" />
+    <ClCompile Include="Engine\ui\UILayoutGroup.cpp" />
+    <ClCompile Include="Engine\ui\UISlider.cpp" />
+    <ClCompile Include="Engine\ui\UIToggle.cpp" />
+    <ClCompile Include="Engine\ui\UIProgressBar.cpp" />
+    <ClCompile Include="Engine\ui\UIScrollView.cpp" />
+    <ClCompile Include="Engine\ui\UITextInput.cpp" />
     <ClCompile Include="Engine\scene\TitleScene.cpp" />
     <ClCompile Include="externals\imgui\imgui.cpp" />
     <ClCompile Include="externals\imgui\imgui_demo.cpp" />
@@ -214,7 +226,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="Engine\2d\Camera2D.cpp" />
     <ClCompile Include="Engine\2d\SpriteAnimation.cpp" />
     <ClCompile Include="Engine\2d\BitmapText.cpp" />
-    <ClCompile Include="Engine\2d\SettingsMenu.cpp" />
+    <ClCompile Include="Engine\ui\SettingsMenu.cpp" />
     <ClCompile Include="Engine\base\TextureManager.cpp" />
     <ClCompile Include="Engine\3d\Object3dCommon.cpp" />
     <ClCompile Include="Engine\3d\Object3d.cpp" />
@@ -319,6 +331,18 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="Engine\object\LevelSpawner.h" />
     <ClInclude Include="Engine\object\ModelObject.h" />
     <ClInclude Include="Engine\object\Rigidbody.h" />
+    <ClInclude Include="Engine\scene\UITestScene.h" />
+    <ClInclude Include="Engine\ui\UIElement.h" />
+    <ClInclude Include="Engine\ui\UICanvas.h" />
+    <ClInclude Include="Engine\ui\UIPanel.h" />
+    <ClInclude Include="Engine\ui\UILabel.h" />
+    <ClInclude Include="Engine\ui\UIButton.h" />
+    <ClInclude Include="Engine\ui\UILayoutGroup.h" />
+    <ClInclude Include="Engine\ui\UISlider.h" />
+    <ClInclude Include="Engine\ui\UIToggle.h" />
+    <ClInclude Include="Engine\ui\UIProgressBar.h" />
+    <ClInclude Include="Engine\ui\UIScrollView.h" />
+    <ClInclude Include="Engine\ui\UITextInput.h" />
     <ClInclude Include="Engine\scene\TitleScene.h" />
     <ClInclude Include="externals\imgui\imconfig.h" />
     <ClInclude Include="externals\imgui\imgui.h" />
@@ -339,7 +363,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="Engine\2d\Camera2D.h" />
     <ClInclude Include="Engine\2d\SpriteAnimation.h" />
     <ClInclude Include="Engine\2d\BitmapText.h" />
-    <ClInclude Include="Engine\2d\SettingsMenu.h" />
+    <ClInclude Include="Engine\ui\SettingsMenu.h" />
     <ClInclude Include="Engine\base\Structs.h" />
     <ClInclude Include="Engine\base\TextureManager.h" />
     <ClInclude Include="Engine\3d\Object3dCommon.h" />

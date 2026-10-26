@@ -29,6 +29,8 @@ private:
     void CreateVertexBuffer(DirectXCommon* dxCommon);
 
     ModelData modelData;
+    // 使っているテクスチャ（モデルが消えると使用数が減る）
+    TextureHandle texture;
     Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource;
     D3D12_VERTEX_BUFFER_VIEW vertexBufferView{};
 };

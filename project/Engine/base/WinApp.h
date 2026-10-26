@@ -4,6 +4,26 @@
 #include <string>
 #include <cstdint>
 #include <functional>
+#include <vector>
+
+// 文字入力欄用のキーボード入力（Windows の文字入力をそのまま受け取るので、Shift・CapsLock・キー配列・
+// 押しっぱなしの繰り返しが OS の設定どおりになる）。Input::GetTextInputEvents で受け取る
+struct TextInputEvent {
+	enum class Type {
+		kCharacter, // 文字（character に入る）
+		kBackspace,
+		kDelete,
+		kLeft,
+		kRight,
+		kHome,
+		kEnd,
+		kEnter,
+		kEscape,
+		kPaste, // Ctrl+V
+	};
+	Type type = Type::kCharacter;
+	char32_t character = 0;
+};
 
 class WinApp{
 public:
@@ -55,6 +75,13 @@ public:
 	// その間にタイマーから呼んでもらう1フレーム分の処理（Frameworkが登録する。nullptrで解除）
 	void SetModalTickCallback(std::function<void()> callback) { modalTickCallback = std::move(callback); }
 
+	// 前回呼んでから届いた文字入力を受け取る（Input::Update が毎フレーム呼ぶ。ゲーム側は Input::GetTextInputEvents を使う）
+	std::vector<TextInputEvent> TakeTextInputEvents();
+	// 日本語入力（IME）の ON/OFF。英数字の入力欄に打っている間は OFF にして、変換の窓が出ないようにする
+	void SetImeEnabled(bool enabled);
+	// クリップボードの文字列（UTF-8。文字列が無ければ空）
+	std::string GetClipboardText() const;
+
 	// ベース解像度（ゲーム座標の基準。起動時のクライアントサイズもこれ）。
 	// 実際のバックバッファはウィンドウサイズに追従するので、描画サイズとしては使わずScreenを参照すること
 	static const int KclientWidth = 1280; // ベース解像度の幅
@@ -81,6 +108,14 @@ private:
 	static constexpr UINT_PTR kModalTickTimerId = 1;
 	bool isInSizeMove = false;
 	std::function<void()> modalTickCallback;
+
+	// 文字入力（WM_CHAR / WM_KEYDOWN で溜め、TakeTextInputEvents で渡す）
+	void OnCharMessage(WPARAM wParam);
+	void OnKeyDownMessage(WPARAM wParam);
+	std::vector<TextInputEvent> pendingTextInput;
+	// UTF-16 の2つで1文字になる文字（絵文字など）の1つ目
+	wchar_t pendingHighSurrogate = 0;
+	bool isImeEnabled = true;
 
 	// WindowProc(static)から自分を参照するため
 	static WinApp* instance;

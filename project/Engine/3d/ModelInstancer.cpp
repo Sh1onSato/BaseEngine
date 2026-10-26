@@ -23,9 +23,14 @@ namespace {
 ModelInstancer::ModelInstancer() = default;
 ModelInstancer::~ModelInstancer() = default;
 
+void ModelInstancer::Initialize(std::shared_ptr<Model> newModel, size_t initialCapacity) {
+    Initialize(newModel.get(), initialCapacity);
+    SetModel(std::move(newModel));
+}
+
 void ModelInstancer::Initialize(Model* newModel, size_t initialCapacity) {
     common = Framework::GetInstance()->GetObject3dCommon();
-    model = newModel;
+    SetModel(newModel);
     DirectXCommon* dxCommon = common->GetDxCommon();
 
     viewProjectionResource = dxCommon->CreatBufferResource(sizeof(Matrix4x4));

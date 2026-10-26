@@ -3,6 +3,7 @@
 #include "Structs.h"
 #include "ParticleCommon.h"
 #include "Camera.h"
+#include "TextureManager.h"
 #include <vector>
 #include <list>
 #include <wrl.h>
@@ -115,7 +116,8 @@ public:
 
 private:
     ParticleCommon* common = nullptr;
-    uint32_t textureIndex = 0;
+    // 使っているテクスチャ（持っている間は解放されない）
+    TextureHandle texture;
     ParticleDrawType drawType = ParticleDrawType::kTriangle;
 
     // 現在のアクティブなパーティクル数

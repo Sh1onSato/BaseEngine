@@ -1,6 +1,7 @@
 #pragma once
 #include "Structs.h"
 #include <d3d12.h>
+#include <memory>
 #include <vector>
 #include <wrl.h>
 
@@ -40,9 +41,12 @@ public:
     ModelInstancer();
     ~ModelInstancer();
 
-    // model は ModelManager などが持つ（借りるだけ）。initialCapacity を超えて Add しても自動で広がる
+    // ModelManager のモデル（持っている間は解放されない）。initialCapacity を超えて Add しても自動で広がる
+    void Initialize(std::shared_ptr<Model> model, size_t initialCapacity = 256);
+    // 自分で作って持っているモデル（借りるだけ。この ModelInstancer より先に消さないこと）
     void Initialize(Model* model, size_t initialCapacity = 256);
-    void SetModel(Model* newModel) { model = newModel; }
+    void SetModel(std::shared_ptr<Model> newModel) { modelHolder = std::move(newModel); model = modelHolder.get(); }
+    void SetModel(Model* newModel) { modelHolder.reset(); model = newModel; }
     Model* GetModel() const { return model; }
 
     // 全部消す（毎フレーム並べ直すときは Update の最初に呼ぶ）
@@ -75,6 +79,8 @@ private:
 
     Object3dCommon* common = nullptr;
     Model* model = nullptr;
+    // ModelManager のモデルを渡されたときだけ持つ（解放されないように）
+    std::shared_ptr<Model> modelHolder;
     Camera* camera = nullptr;
 
     // CPU 側の一覧（Add で増える）

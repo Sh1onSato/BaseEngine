@@ -4,6 +4,7 @@
 #include "Object3dCommon.h"
 #include "Structs.h"
 #include "Camera.h"
+#include <memory>
 #include <wrl.h>
 
 class Object3d {
@@ -16,7 +17,10 @@ public:
     void ImGui(); // 追加
 
     // Setter
-    void SetModel(Model* model) { this->model = model; }
+    // ModelManager のモデル（持っている間は解放されない）
+    void SetModel(std::shared_ptr<Model> model) { modelHolder = std::move(model); this->model = modelHolder.get(); }
+    // 自分で作って持っているモデル（借りるだけ。この Object3d より先に消さないこと）
+    void SetModel(Model* model) { modelHolder.reset(); this->model = model; }
     // スキニング用ボーン行列パレットのセット（非所有ポインタ。SetModel()と同じ方針）
     // 未設定の場合はObject3dCommonのデフォルト単位行列パレットが使われる
     void SetBonePalette(ID3D12Resource* paletteResource) { this->bonePaletteResource = paletteResource; }
@@ -34,7 +38,10 @@ public:
 
 private:
     Object3dCommon* common = nullptr;
+    // 描画に使うモデル
     Model* model = nullptr;
+    // ModelManager のモデルを渡されたときだけ持つ（解放されないように）
+    std::shared_ptr<Model> modelHolder;
     // スキニング用ボーン行列パレット（非所有）。nullptrならcommonのデフォルト単位行列パレットを使う
     ID3D12Resource* bonePaletteResource = nullptr;
 

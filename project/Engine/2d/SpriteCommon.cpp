@@ -1,7 +1,11 @@
 #include "SpriteCommon.h"
 #include "Sprite.h"
 #include "Logger.h"
+#include "Collision.h"
+#include "Screen.h"
 #include <algorithm>
+#include <cassert>
+#include <cmath>
 using namespace ShaderCompiler;
 void SpriteCommon::Initialize(DirectXCommon* dxCommon, SrvManager* srvManager) {
 	this->dxCommon = dxCommon; // 受け取ったポインタをメンバ変数に保存
@@ -211,7 +215,37 @@ void SpriteCommon::Enqueue(Sprite* sprite, uint32_t srvIndex) {
 	if (sprite == nullptr) {
 		return;
 	}
-	drawQueue.push_back({ sprite, srvIndex, sprite->GetLayer(), drawOrderCounter++ });
+	const bool hasClip = !clipStack.empty();
+	drawQueue.push_back({ sprite, srvIndex, sprite->GetLayer(), drawOrderCounter++, hasClip,
+		hasClip ? clipStack.back() : D3D12_RECT{} });
+}
+
+void SpriteCommon::PushClipRect(const Rect& rect) {
+	// ゲーム座標 → バックバッファのピクセル（ゲームの絵はビューポートの範囲に描かれる）
+	const D3D12_VIEWPORT& viewport = Screen::GetViewport();
+	const Vector2 gameSize = Screen::GetGameSize();
+	const float scaleX = viewport.Width / gameSize.x;
+	const float scaleY = viewport.Height / gameSize.y;
+	D3D12_RECT pixelRect{
+		std::lround(viewport.TopLeftX + rect.min.x * scaleX),
+		std::lround(viewport.TopLeftY + rect.min.y * scaleY),
+		std::lround(viewport.TopLeftX + rect.max.x * scaleX),
+		std::lround(viewport.TopLeftY + rect.max.y * scaleY),
+	};
+	// 外側の範囲（無ければ画面）と重なった部分だけにする
+	const D3D12_RECT& outer = clipStack.empty() ? Screen::GetScissorRect() : clipStack.back();
+	pixelRect.left = (std::max)(pixelRect.left, outer.left);
+	pixelRect.top = (std::max)(pixelRect.top, outer.top);
+	pixelRect.right = (std::max)((std::min)(pixelRect.right, outer.right), pixelRect.left);
+	pixelRect.bottom = (std::max)((std::min)(pixelRect.bottom, outer.bottom), pixelRect.top);
+	clipStack.push_back(pixelRect);
+}
+
+void SpriteCommon::PopClipRect() {
+	assert(!clipStack.empty() && "SpriteCommon: PushClipRect より PopClipRect を多く呼んでいます");
+	if (!clipStack.empty()) {
+		clipStack.pop_back();
+	}
 }
 
 void SpriteCommon::Flush() {
@@ -225,8 +259,23 @@ void SpriteCommon::Flush() {
 	std::stable_sort(drawQueue.begin(), drawQueue.end(),
 		[](const DrawRequest& a, const DrawRequest& b) { return a.layer < b.layer; });
 
+	// 範囲が変わるときだけシザー矩形を切り替え、最後に元に戻す
+	ID3D12GraphicsCommandList* commandList = dxCommon->GetCommandList();
+	const D3D12_RECT defaultScissor = dxCommon->GetScissorRect();
+	D3D12_RECT currentScissor = defaultScissor;
+	auto isSameRect = [](const D3D12_RECT& a, const D3D12_RECT& b) {
+		return a.left == b.left && a.top == b.top && a.right == b.right && a.bottom == b.bottom;
+	};
 	for (const DrawRequest& request : drawQueue) {
+		const D3D12_RECT& scissor = request.hasClip ? request.clipRect : defaultScissor;
+		if (!isSameRect(scissor, currentScissor)) {
+			commandList->RSSetScissorRects(1, &scissor);
+			currentScissor = scissor;
+		}
 		request.sprite->RecordDrawCommand(request.srvIndex);
+	}
+	if (!isSameRect(currentScissor, defaultScissor)) {
+		commandList->RSSetScissorRects(1, &defaultScissor);
 	}
 
 	// キューを空にする（容量は残るので次フレームで再確保されない）

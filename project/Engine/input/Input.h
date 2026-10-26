@@ -115,6 +115,11 @@ public:
     /// </summary>
     long GetMouseWheel() const { return mouseState.lZ; }
 
+    // ===== 文字入力 =====
+    // このフレームに届いた文字入力（打った順。Shift・キー配列・押しっぱなしの繰り返しは OS どおり）。
+    // 名前入力などの文字入力欄用。ゲームの操作には PushKey / アクションマップを使う
+    const std::vector<TextInputEvent>& GetTextInputEvents() const { return textInputEvents; }
+
     // ===== ゲームパッド (XInput、最大4台) =====
     /// <summary>
     /// コントローラーの接続状態
@@ -184,6 +189,9 @@ private:
     DIMOUSESTATE2 mouseState = {};
     DIMOUSESTATE2 mouseStatePre = {};
     Vector2 mousePosition = { 0.0f, 0.0f };
+
+    // 文字入力
+    std::vector<TextInputEvent> textInputEvents;
 
     // コントローラー (XInput)
     PadState pads[kMaxPads] = {};

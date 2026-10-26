@@ -155,7 +155,7 @@ void LevelSpawner::AddLevelCollider(GameObject& object, const LevelColliderData&
     }
 }
 
-Model* LevelSpawner::LoadModelOrFallback(const std::string& fileName, bool isSphere) {
+std::shared_ptr<Model> LevelSpawner::LoadModelOrFallback(const std::string& fileName, bool isSphere) {
     ModelManager* modelManager = ModelManager::GetInstance();
     if (fileName.empty()) {
         // モデル指定なし: 判定の形に合わせた仮の見た目（どちらも大きさ1なので scale がそのまま見た目の大きさ）

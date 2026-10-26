@@ -27,7 +27,9 @@ public:
     // シャドウパス用（Object3dCommon::PreDrawShadow と PostDrawShadow の間で呼ぶ）
     void DrawShadow(const Matrix4x4& lightViewProjection);
 
-    // model は ModelManager などが持つ（借りるだけ）
+    // ModelManager のモデル（持っている間は解放されない）
+    void SetModel(std::shared_ptr<Model> newModel);
+    // 自分で作って持っているモデル（借りるだけ。この ModelObject より先に消さないこと）
     void SetModel(Model* newModel);
     Model* GetModel() const { return model; }
     void SetColor(const Vector4& newColor) { color = newColor; }
@@ -39,5 +41,7 @@ private:
 
     std::unique_ptr<Object3d> object3d;
     Model* model = nullptr;
+    // ModelManager のモデルを渡されたときだけ持つ（Object3d には借りる形で渡す）
+    std::shared_ptr<Model> modelHolder;
     Vector4 color = { 1.0f, 1.0f, 1.0f, 1.0f };
 };

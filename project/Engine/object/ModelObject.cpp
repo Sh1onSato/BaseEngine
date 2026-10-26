@@ -7,7 +7,14 @@ ModelObject::ModelObject() = default;
 // Object3d の中身はヘッダーで見えないので、デストラクタは .cpp に置く（unique_ptr<Object3d> の破棄に必要）
 ModelObject::~ModelObject() = default;
 
+void ModelObject::SetModel(std::shared_ptr<Model> newModel) {
+    // 先に借りる側を差し替えてから持つ（同じモデルを渡し直しても消えないように）
+    SetModel(newModel.get());
+    modelHolder = std::move(newModel);
+}
+
 void ModelObject::SetModel(Model* newModel) {
+    modelHolder.reset();
     model = newModel;
     if (object3d) {
         object3d->SetModel(model);

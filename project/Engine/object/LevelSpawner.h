@@ -3,6 +3,7 @@
 #include "LevelData.h"
 #include <functional>
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <type_traits>
@@ -54,6 +55,7 @@ public:
     // このスポナーが作った物を全部消して、最後に Spawn したファイルを読み直して作り直す。
     // 読み込みに失敗したら false（今の物はそのまま残る。JSON の書きかけで落ちないように）。
     // 注意: モデル(.obj)は ModelManager が覚えているので、中身を書き換えても読み直されない
+    // （シーンを切り替えて誰も使わなくなれば解放されるので、別のシーンを挟んでから戻れば読み直される）
     bool Reload(GameObjectManager& objects, std::string* errorMessage = nullptr);
     // このスポナーが作った物を全部 Destroy する（実際に消えるのはフレームの最後）
     void DestroySpawned(GameObjectManager& objects) const;
@@ -69,7 +71,7 @@ private:
     // "collider" をワールドの大きさにして付ける
     void AddLevelCollider(GameObject& object, const LevelColliderData& collider, bool isRegistered) const;
     // "file_name" のモデル（見つからなければ白い立方体。"file_name" が空なら isSphere で白い球か立方体）
-    Model* LoadModelOrFallback(const std::string& fileName, bool isSphere);
+    std::shared_ptr<Model> LoadModelOrFallback(const std::string& fileName, bool isSphere);
 
     std::map<std::string, Factory> factories;
     std::string modelDirectory = "Resources/models";

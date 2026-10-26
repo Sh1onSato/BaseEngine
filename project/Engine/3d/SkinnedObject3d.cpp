@@ -7,11 +7,11 @@ void SkinnedObject3d::Initialize(Object3dCommon* common) {
     Object3d::Initialize(common);
 }
 
-void SkinnedObject3d::SetGltfData(DirectXCommon* dxCommon, const GltfModelData* gltfData) {
-    this->gltfData = gltfData;
-    skeleton = Skeleton::Create(*gltfData);
-    animation = Animation::Create(*gltfData);
-    skinCluster.Initialize(dxCommon, gltfData->skin.inverseBindMatrices);
+void SkinnedObject3d::SetGltfData(DirectXCommon* dxCommon, std::shared_ptr<const GltfModelData> gltfData) {
+    this->gltfData = std::move(gltfData);
+    skeleton = Skeleton::Create(*this->gltfData);
+    animation = Animation::Create(*this->gltfData);
+    skinCluster.Initialize(dxCommon, this->gltfData->skin.inverseBindMatrices);
 }
 
 void SkinnedObject3d::Update() {

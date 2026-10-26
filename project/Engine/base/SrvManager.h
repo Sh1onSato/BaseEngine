@@ -2,6 +2,7 @@
 #include "DirectXCommon.h"
 #include <wrl.h>
 #include <cstdint>
+#include <vector>
 
 class SrvManager {
 public:
@@ -10,8 +11,12 @@ public:
 
     void Initialize(DirectXCommon* dxCommon);
 
-    // 空きインデックスを確保してその番号を返す
+    // 空きインデックスを確保してその番号を返す（Free された番号があればそれを使い回す）
     uint32_t Allocate();
+    // 使い終わった番号を返す。GPU がその番号を使い終わってから呼ぶこと（TextureManager はフレームの始めに呼ぶ）
+    void Free(uint32_t index);
+    // 今使っている番号の数（デバッグ表示用）
+    uint32_t GetUsedCount() const { return useCount - static_cast<uint32_t>(freeIndices.size()); }
 
     // 指定インデックスのハンドルを取得
     D3D12_CPU_DESCRIPTOR_HANDLE GetCPUDescriptorHandle(uint32_t index);
@@ -38,4 +43,6 @@ private:
     uint32_t descriptorSize;
     // 次に使用するインデックス
     uint32_t useCount = 0;
+    // Free で返された番号（Allocate で先に使う）
+    std::vector<uint32_t> freeIndices;
 };

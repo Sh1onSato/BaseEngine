@@ -99,6 +99,10 @@ void Framework::Update() {
 	if (winApp->ConsumeResize(width, height)) {
 		dxCommon->Resize(width, height);
 	}
+	// 使われなくなったモデルと画像を解放する（前フレームの描画は PostDraw で GPU の完了を待っているので安全）。
+	// モデルが消えると画像の使用数が減るので、モデルを先にする
+	ModelManager::GetInstance()->Update();
+	TextureManager::GetInstance()->Update();
 	input->Update();
 	// フェードはポーズ(timeScale=0)中も進めたいのでunscaledを使う
 	AudioManager::GetInstance()->Update(Time::GetUnscaledDeltaTime());
