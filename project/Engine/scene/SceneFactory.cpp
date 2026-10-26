@@ -8,6 +8,7 @@
 #include "InstancingTestScene.h"
 #include "PhysicsTestScene.h"
 #include "UITestScene.h"
+#include "TiledTestScene.h"
 #include "Logger.h"
 #include <format>
 
@@ -49,6 +50,10 @@ BaseScene* SceneFactory::CreateScene(const std::string& sceneName) {
     else if (sceneName == "UI_TEST") {
         // UI（UICanvas・パネル・文字・ボタン・配置・クリック）の検証用シーン
         newScene = new UITestScene();
+    }
+    else if (sceneName == "TILED_TEST") {
+        // Tiled のマップ（TiledLoader / TiledSpawner / TileMap）の検証用シーン
+        newScene = new TiledTestScene();
     }
     else {
         // 該当なしの場合は無言でnullptrを返すと「シーンが何も更新・描画されない」という

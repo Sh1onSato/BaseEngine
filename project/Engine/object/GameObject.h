@@ -74,7 +74,7 @@ public:
 
     // 自分を管理しているマネージャー（Update中に弾を撃つ・仲間を探すときに使う）
     GameObjectManager* GetManager() const { return manager; }
-    // レベルデータ（LevelSpawner）から作られた物なら true
+    // レベルデータ（LevelSpawner・TiledSpawner）から作られた物なら true
     bool IsFromLevel() const { return spawnedBy != nullptr; }
 
     // --- 当たり判定 ---
@@ -105,12 +105,13 @@ public:
 private:
     // manager / isDestroyed などはマネージャーだけが直接書き換える
     friend class GameObjectManager;
-    // spawnedBy は LevelSpawner だけが設定する
+    // spawnedBy はスポナーだけが設定する
     friend class LevelSpawner;
+    friend class TiledSpawner;
 
     GameObjectManager* manager = nullptr;
-    // 自分を作った LevelSpawner（読み直しで「そのスポナーが作った物」だけを消すための印。指す先には触らない）
-    const LevelSpawner* spawnedBy = nullptr;
+    // 自分を作ったスポナー（LevelSpawner か TiledSpawner。読み直しで「そのスポナーが作った物」だけを消すための印。指す先には触らない）
+    const void* spawnedBy = nullptr;
     std::string name;
     std::string tag;
     bool isActive = true;

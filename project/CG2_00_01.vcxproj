@@ -193,6 +193,10 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="Engine\object\LevelSpawner.cpp" />
     <ClCompile Include="Engine\object\ModelObject.cpp" />
     <ClCompile Include="Engine\object\ModelBatcher.cpp" />
+    <ClCompile Include="Engine\object\TiledLoader.cpp" />
+    <ClCompile Include="Engine\object\TiledSpawner.cpp" />
+    <ClCompile Include="Engine\2d\TileMap.cpp" />
+    <ClCompile Include="Engine\scene\TiledTestScene.cpp" />
     <ClCompile Include="Engine\object\Rigidbody.cpp" />
     <ClCompile Include="Engine\scene\UITestScene.cpp" />
     <ClCompile Include="Engine\ui\UIElement.cpp" />
@@ -351,6 +355,12 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="Engine\object\LevelSpawner.h" />
     <ClInclude Include="Engine\object\ModelObject.h" />
     <ClInclude Include="Engine\object\ModelBatcher.h" />
+    <ClInclude Include="Engine\object\TiledData.h" />
+    <ClInclude Include="Engine\object\TiledLoader.h" />
+    <ClInclude Include="Engine\object\TiledSpawner.h" />
+    <ClInclude Include="Engine\2d\TileMap.h" />
+    <ClInclude Include="Engine\2d\SpriteDrawable.h" />
+    <ClInclude Include="Engine\scene\TiledTestScene.h" />
     <ClInclude Include="Engine\object\Rigidbody.h" />
     <ClInclude Include="Engine\scene\UITestScene.h" />
     <ClInclude Include="Engine\ui\UIElement.h" />

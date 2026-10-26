@@ -1,0 +1,28 @@
+{
+    "type":  "tileset",
+    "version":  "1.10",
+    "tiledversion":  "1.10.2",
+    "name":  "test_tiles",
+    "image":  "test_tiles.png",
+    "imagewidth":  128,
+    "imageheight":  64,
+    "tilewidth":  32,
+    "tileheight":  32,
+    "tilecount":  8,
+    "columns":  4,
+    "margin":  0,
+    "spacing":  0,
+    "tiles":  [
+                  {
+                      "id":  4,
+                      "type":  "Coin",
+                      "properties":  [
+                                         {
+                                             "name":  "score",
+                                             "type":  "int",
+                                             "value":  10
+                                         }
+                                     ]
+                  }
+              ]
+}

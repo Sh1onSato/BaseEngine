@@ -291,6 +291,18 @@
     <ClCompile Include="Engine\object\ModelBatcher.cpp">
       <Filter>ソース ファイル\engine\object</Filter>
     </ClCompile>
+    <ClCompile Include="Engine\object\TiledLoader.cpp">
+      <Filter>ソース ファイル\engine\object</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\object\TiledSpawner.cpp">
+      <Filter>ソース ファイル\engine\object</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\2d\TileMap.cpp">
+      <Filter>ソース ファイル\engine\2d</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\scene\TiledTestScene.cpp">
+      <Filter>ソース ファイル\engine\scene</Filter>
+    </ClCompile>
     <ClCompile Include="Engine\object\Rigidbody.cpp">
       <Filter>ソース ファイル\engine\object</Filter>
     </ClCompile>
@@ -618,6 +630,24 @@
     </ClInclude>
     <ClInclude Include="Engine\object\ModelBatcher.h">
       <Filter>ヘッダー ファイル\engine\object</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\object\TiledData.h">
+      <Filter>ヘッダー ファイル\engine\object</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\object\TiledLoader.h">
+      <Filter>ヘッダー ファイル\engine\object</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\object\TiledSpawner.h">
+      <Filter>ヘッダー ファイル\engine\object</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\2d\TileMap.h">
+      <Filter>ヘッダー ファイル\engine\2d</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\2d\SpriteDrawable.h">
+      <Filter>ヘッダー ファイル\engine\2d</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\scene\TiledTestScene.h">
+      <Filter>ヘッダー ファイル\engine\scene</Filter>
     </ClInclude>
     <ClInclude Include="Engine\object\Rigidbody.h">
       <Filter>ヘッダー ファイル\engine\object</Filter>
