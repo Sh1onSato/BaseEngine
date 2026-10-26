@@ -97,6 +97,9 @@ void Text::SetAnchorPoint(const Vector2& anchor) { sprite->SetAnchorPoint(anchor
 void Text::SetColor(const Vector4& color) { sprite->SetColor(color); }
 void Text::SetRotation(float rotation) { sprite->SetRotation(rotation); }
 void Text::SetLayer(int layer) { sprite->SetLayer(layer); }
+Vector2 Text::GetPosition() const { return sprite->GetPosition(); }
+const Vector4& Text::GetColor() const { return sprite->GetColor(); }
+float Text::GetRotation() const { return sprite->GetRotation(); }
 
 void Text::SetScale(float newScale) {
     scale = newScale;

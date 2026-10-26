@@ -1,4 +1,5 @@
 #pragma once
+#include "CameraShake.h"
 #include "Structs.h"
 
 // 2Dカメラ（ワールド座標 → ゲーム座標(画面)への変換）
@@ -15,6 +16,11 @@ public:
 	void SetRotation(float rotation) { this->rotation = rotation; }
 	// 現在の位置からdeltaだけ動かす（ワールド座標）
 	void Move(const Vector2& delta) { position = position + delta; }
+	// 揺らす（爆発・被弾など）。strength: 揺れ幅（画面のピクセル。ズームに関係なく同じ幅）、seconds: 秒数、frequency: 1 秒あたりの揺れの回数。
+	// GetPosition の値は変わらず、描く時（GetViewMatrix・WorldToScreen・ScreenToWorld）だけ揺れる
+	void Shake(float strength, float seconds, float frequency = 25.0f) { shake.Start(strength, seconds, frequency); }
+	void StopShake() { shake.Stop(); }
+	bool IsShaking() const { return shake.IsShaking(); }
 
 	// --- Getter ---
 	const Vector2& GetPosition() const { return position; }
@@ -36,4 +42,9 @@ private:
 	float zoom = 1.0f;
 	// 回転（ラジアン）
 	float rotation = 0.0f;
+	CameraShake shake;
+
+	// 揺れを足した位置・回転（描く時に使う）
+	Vector2 GetShakenPosition() const;
+	float GetShakenRotation() const;
 };

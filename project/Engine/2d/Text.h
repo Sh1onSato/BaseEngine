@@ -64,6 +64,10 @@ public:
 
     // 文字列を描画したときの大きさ(px、Scale適用前)
     Vector2 GetSize() const { return textureSize; }
+    Vector2 GetPosition() const;
+    const Vector4& GetColor() const;
+    float GetScale() const { return scale; }
+    float GetRotation() const;
 
     void Update();
     void Draw();

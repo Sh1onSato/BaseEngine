@@ -1,5 +1,6 @@
 #pragma once
 #include "Calculation.h"
+#include "CameraShake.h"
 #include "Structs.h"
 #include "WinApp.h"
 
@@ -21,8 +22,15 @@ public:
     void SetTranslate(const Vector3& translate) { transform.translate = translate; }
     void SetTransform(const Transform& transform) { this->transform = transform; }
 
+    // 揺らす（爆発・着地・被弾など）。strength: 位置の揺れ幅（ワールドの長さ）、seconds: 秒数、frequency: 1 秒あたりの揺れの回数。
+    // GetTransform の値は変わらず、Update で作る行列だけが揺れる（毎フレーム Update を呼ぶこと）
+    void Shake(float strength, float seconds, float frequency = 25.0f) { shake.Start(strength, seconds, frequency); }
+    void StopShake() { shake.Stop(); }
+    bool IsShaking() const { return shake.IsShaking(); }
+
 private:
     Transform transform;
+    CameraShake shake;
     Matrix4x4 viewMatrix;
     Matrix4x4 projectionMatrix;
     Matrix4x4 viewProjectionMatrix;

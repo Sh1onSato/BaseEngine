@@ -14,6 +14,7 @@
 #include "Sound3DTestScene.h"
 #include "SoundPropagationTestScene.h"
 #include "AnimationTestScene.h"
+#include "TweenTestScene.h"
 #include "Logger.h"
 #include <format>
 
@@ -79,6 +80,10 @@ BaseScene* SceneFactory::CreateScene(const std::string& sceneName) {
     else if (sceneName == "ANIMATION_TEST") {
         // アニメーションの拡張（レイヤー・2次元で混ぜる・時刻の合図・状態ごとの速さ）の検証用シーン
         newScene = new AnimationTestScene();
+    }
+    else if (sceneName == "TWEEN_TEST") {
+        // Tween・TweenSequence・カメラの揺れ・ヒットストップの検証用シーン
+        newScene = new TweenTestScene();
     }
     else {
         // 該当なしの場合は無言でnullptrを返すと「シーンが何も更新・描画されない」という

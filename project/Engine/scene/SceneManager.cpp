@@ -8,6 +8,7 @@
 #include "ModelManager.h"
 #include "Framework.h"
 #include "DebugDraw.h"
+#include "Tween.h"
 #include <algorithm>
 
 SceneManager::SceneManager() = default;
@@ -42,6 +43,9 @@ void SceneManager::SwapScene() {
     Framework::GetInstance()->GetPostProcess()->ResetToDefault();
     // 反響は場所ごとの物なので、次のシーンに持ち越さない
     AudioManager::GetInstance()->SetReverb(ReverbPreset::kOff);
+    // 旧シーンの物を動かしている Tween を止める（消えた物に書き込まないように）。ヒットストップも持ち越さない
+    Tweens::KillAll();
+    Time::CancelHitStop();
 
     if (currentScene) {
         // 次のシーンに自分（マネージャ）を教える

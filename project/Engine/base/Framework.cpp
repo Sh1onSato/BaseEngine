@@ -3,6 +3,7 @@
 #include "ModelManager.h"
 #include "CameraManager.h"
 #include "GameSettings.h"
+#include "Tween.h"
 
 Framework* Framework::instance = nullptr;
 
@@ -138,6 +139,8 @@ void Framework::Update() {
 		postProcess->DrawDebugUI();
 	}
 #endif
+	// Tween は シーンの Update の前に進める（シーンが行列を作る時に、このフレームの値が入っているように）
+	Tweens::Update();
 	sceneManager->Update();
 }
 

@@ -172,6 +172,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="Engine\base\SrvManager.cpp" />
     <ClCompile Include="Engine\base\RenderScaler.cpp" />
     <ClCompile Include="Engine\math\Calculation.cpp" />
+    <ClCompile Include="Engine\math\Tween.cpp" />
     <ClCompile Include="Engine\base\DirectXCommon.cpp" />
     <ClCompile Include="Engine\scene\GameScene.cpp" />
     <ClCompile Include="Engine\scene\GameSettings.cpp" />
@@ -203,6 +204,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="Engine\scene\Sound3DTestScene.cpp" />
     <ClCompile Include="Engine\scene\SoundPropagationTestScene.cpp" />
     <ClCompile Include="Engine\scene\AnimationTestScene.cpp" />
+    <ClCompile Include="Engine\scene\TweenTestScene.cpp" />
     <ClCompile Include="Engine\ai\NavGrid.cpp" />
     <ClCompile Include="Engine\ai\PathFollower.cpp" />
     <ClCompile Include="Engine\object\Rigidbody.cpp" />
@@ -392,6 +394,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="Engine\scene\Sound3DTestScene.h" />
     <ClInclude Include="Engine\scene\SoundPropagationTestScene.h" />
     <ClInclude Include="Engine\scene\AnimationTestScene.h" />
+    <ClInclude Include="Engine\scene\TweenTestScene.h" />
     <ClInclude Include="Engine\ai\NavGrid.h" />
     <ClInclude Include="Engine\ai\PathFollower.h" />
     <ClInclude Include="Engine\object\Rigidbody.h" />
@@ -452,6 +455,8 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="Engine\2d\Text.h" />
     <ClInclude Include="Engine\base\Timer.h" />
     <ClInclude Include="Engine\math\Easing.h" />
+    <ClInclude Include="Engine\math\Tween.h" />
+    <ClInclude Include="Engine\math\CameraShake.h" />
     <ClInclude Include="Engine\math\Collision.h" />
     <ClInclude Include="Engine\base\SaveData.h" />
     <ClInclude Include="Engine\base\JsonWriter.h" />

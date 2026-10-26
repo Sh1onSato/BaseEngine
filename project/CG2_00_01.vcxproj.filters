@@ -120,6 +120,9 @@
     <ClCompile Include="Engine\math\Calculation.cpp">
       <Filter>ソース ファイル\engine\math</Filter>
     </ClCompile>
+    <ClCompile Include="Engine\math\Tween.cpp">
+      <Filter>ソース ファイル\engine\math</Filter>
+    </ClCompile>
     <ClCompile Include="Engine\base\DirectXCommon.cpp">
       <Filter>ソース ファイル\engine\base</Filter>
     </ClCompile>
@@ -313,6 +316,9 @@
       <Filter>ソース ファイル\engine\scene</Filter>
     </ClCompile>
     <ClCompile Include="Engine\scene\AnimationTestScene.cpp">
+      <Filter>ソース ファイル\engine\scene</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\scene\TweenTestScene.cpp">
       <Filter>ソース ファイル\engine\scene</Filter>
     </ClCompile>
     <ClCompile Include="Engine\scene\PathfindTestScene.cpp">
@@ -571,6 +577,12 @@
     <ClInclude Include="Engine\math\Easing.h">
       <Filter>ヘッダー ファイル\engine\math</Filter>
     </ClInclude>
+    <ClInclude Include="Engine\math\CameraShake.h">
+      <Filter>ヘッダー ファイル\engine\math</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\math\Tween.h">
+      <Filter>ヘッダー ファイル\engine\math</Filter>
+    </ClInclude>
     <ClInclude Include="Engine\base\Timer.h">
       <Filter>ヘッダー ファイル\engine\base</Filter>
     </ClInclude>
@@ -692,6 +704,9 @@
       <Filter>ヘッダー ファイル\engine\scene</Filter>
     </ClInclude>
     <ClInclude Include="Engine\scene\AnimationTestScene.h">
+      <Filter>ヘッダー ファイル\engine\scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\scene\TweenTestScene.h">
       <Filter>ヘッダー ファイル\engine\scene</Filter>
     </ClInclude>
     <ClInclude Include="Engine\scene\PathfindTestScene.h">

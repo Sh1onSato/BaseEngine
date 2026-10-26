@@ -28,6 +28,13 @@ public:
 	static float GetTimeScale() { return timeScale; }
 	static void SetTimeScale(float scale) { timeScale = scale < 0.0f ? 0.0f : scale; }
 
+	// ヒットストップ（攻撃が当たった瞬間に、ゲームの時間を一瞬止める・遅くする演出）。
+	// seconds 秒（実際の時間）の間、GetDeltaTime が timeScale × scale になる。SetTimeScale とは別なので、終わると元の速さに戻る。
+	// 続けて呼ぶと、長い方の秒数・遅い方の速さになる。UI・カメラの揺れ（Camera::Shake）は止まらない
+	static void HitStop(float seconds, float scale = 0.0f);
+	static void CancelHitStop() { hitStopRemaining = 0.0f; }
+	static bool IsHitStopping() { return hitStopRemaining > 0.0f; }
+
 	// 1フレームの経過時間の上限（ブレークポイント停止やウィンドウドラッグ後に巨大なdeltaTimeで
 	// オブジェクトが壁を突き抜けるのを防ぐ）
 	static constexpr float kMaxDeltaTime = 0.1f;
@@ -40,4 +47,6 @@ private:
 	static double unscaledTotalTime;
 	static float timeScale;
 	static uint64_t frameCount;
+	static float hitStopRemaining;
+	static float hitStopScale;
 };

@@ -33,6 +33,10 @@ public:
 
 	void ImGui(); // デバッグ用UIを表示する関数を追加
 	// --- 外部から数値を取得するための関数 (Getter) ---
+	Vector2 GetPosition() const { return { transform.translate.x, transform.translate.y }; }
+	const Vector2& GetSize() const { return size; }
+	float GetRotation() const { return transform.rotate.z; }
+	const Vector4& GetColor() const { return materialData->color; }
 	const Vector2& GetAnchorPoint() const { return anchorPoint; }
 	const bool& GetIsFlipX() const { return isFlipX; }
 	const bool& GetIsFlipY() const { return isFlipY; }

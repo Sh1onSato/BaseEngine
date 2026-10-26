@@ -2,6 +2,11 @@
 #include "Screen.h"
 #include "externals/imgui/imgui.h"
 
+namespace {
+    // 揺れの幅 1 あたりの傾き（ラジアン）。位置だけだと遠くを見ている時に揺れが分かりにくいので、少し傾ける
+    constexpr float kShakeRollPerUnit = 0.03f;
+}
+
 Camera::Camera() {
     // 初期値設定
     transform = { {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -10.0f} };
@@ -9,8 +14,10 @@ Camera::Camera() {
 }
 
 void Camera::Update() {
-    // カメラのワールド行列を作成
-    Matrix4x4 cameraMatrix = Calculation::MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
+    // カメラのワールド行列を作成（揺れている間は、位置と傾き（z 回転）を少しずらす）
+    const Vector3 shakeOffset = shake.GetOffset();
+    const Vector3 shakenRotate = { transform.rotate.x, transform.rotate.y, transform.rotate.z + shakeOffset.z * kShakeRollPerUnit };
+    Matrix4x4 cameraMatrix = Calculation::MakeAffineMatrix(transform.scale, shakenRotate, transform.translate + shakeOffset);
     // ビュー行列はカメラ行列の逆行列
     viewMatrix = Calculation::Inverse(cameraMatrix);
     // プロジェクション行列の作成（アスペクト比はゲーム座標に合わせる。kExpandでウィンドウ比率が変わっても歪まない）
