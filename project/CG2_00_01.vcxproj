@@ -241,6 +241,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="Engine\3d\Animation.cpp" />
     <ClCompile Include="Engine\3d\SkinCluster.cpp" />
     <ClCompile Include="Engine\3d\SkinnedObject3d.cpp" />
+    <ClCompile Include="Engine\3d\AnimationStateMachine.cpp" />
     <ClCompile Include="Engine\base\JsonParser.cpp" />
     <ClCompile Include="Engine\base\Framework.cpp" />
     <ClCompile Include="Engine\2d\Text.cpp" />
@@ -380,6 +381,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="Engine\3d\Animation.h" />
     <ClInclude Include="Engine\3d\SkinCluster.h" />
     <ClInclude Include="Engine\3d\SkinnedObject3d.h" />
+    <ClInclude Include="Engine\3d\AnimationStateMachine.h" />
     <ClInclude Include="Engine\base\JsonValue.h" />
     <ClInclude Include="Engine\base\JsonParser.h" />
     <ClInclude Include="Engine\base\Framework.h" />

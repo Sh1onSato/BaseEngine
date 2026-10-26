@@ -225,6 +225,9 @@
     <ClCompile Include="Engine\3d\SkinnedObject3d.cpp">
       <Filter>ソース ファイル\engine\3d</Filter>
     </ClCompile>
+    <ClCompile Include="Engine\3d\AnimationStateMachine.cpp">
+      <Filter>ソース ファイル\engine\3d</Filter>
+    </ClCompile>
     <ClCompile Include="Engine\base\JsonParser.cpp">
       <Filter>ソース ファイル\engine\base</Filter>
     </ClCompile>
@@ -431,6 +434,9 @@
       <Filter>ヘッダー ファイル\engine\3d</Filter>
     </ClInclude>
     <ClInclude Include="Engine\3d\SkinnedObject3d.h">
+      <Filter>ヘッダー ファイル\engine\3d</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\3d\AnimationStateMachine.h">
       <Filter>ヘッダー ファイル\engine\3d</Filter>
     </ClInclude>
     <ClInclude Include="Engine\base\JsonValue.h">

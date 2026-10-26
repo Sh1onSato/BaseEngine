@@ -58,6 +58,7 @@ void SkinningTestScene::Initialize() {
     AddGltf("RiggedFigure", "Resources/gltf/khronos/RiggedFigure", "RiggedFigure.glb", { 0.0f, 0.0f, 0.0f }, 1.0f);
     // キツネ（NORMAL なし・根元が複数・アニメーション3本）。元の単位がセンチなので小さくする
     fox = AddGltf("Fox", "Resources/gltf/khronos/Fox", "Fox.glb", { 2.0f, 0.0f, 0.0f }, 0.02f).skinned;
+    SetupFoxAnimator();
     // 箱（.gltf + 外部の .bin と .png。骨もアニメーションも無い → ModelManager::LoadModel で読む）
     AddGltf("BoxTextured", "Resources/gltf/khronos/BoxTextured", "BoxTextured.gltf", { 4.0f, 0.5f, 0.0f }, 1.0f);
 
@@ -83,13 +84,14 @@ void SkinningTestScene::Initialize() {
     helpText = std::make_unique<Text>();
     helpText->Initialize(spriteCommon, 20.0f);
     helpText->SetText("glTF テスト (SKINNING_TEST)\n"
-                      "[Space] キツネのアニメーション切り替え  [L] ループ / 1回  [↑][↓] 速さ  [M] モーフの重みを自分で決める\n"
+                      "[Space] キツネのアニメーション切り替え  [L] ループ / 1回  [B] つなぐ秒数  [↑][↓] 速さ  [M] モーフの重みを自分で決める\n"
+                      "[N] キツネの Walk と Run を混ぜる  [←][→] 混ぜる割合  [C] 状態遷移で動かす（[←][→] Speed  [T] Look）\n"
                       "カメラ: 右ドラッグで回す  ホイールで近づく  [WASD][QE] 見る点を動かす  [R] 戻す");
     helpText->SetPosition({ 20.0f, 16.0f });
     helpText->SetLayer(kUiLayer);
     statusText = std::make_unique<Text>();
     statusText->Initialize(spriteCommon, 20.0f);
-    statusText->SetPosition({ 20.0f, 100.0f });
+    statusText->SetPosition({ 20.0f, 124.0f });
     statusText->SetLayer(kUiLayer);
 
     // --- 床(非スキニング。デフォルトパレットのフォールバック確認を兼ねる) ---
@@ -149,22 +151,91 @@ void SkinningTestScene::Finalize() {
     entries.clear();
 }
 
+void SkinningTestScene::SetupFoxAnimator() {
+    // Idle（見回す）⇔ Move（Speed 0.3〜1.0 で Walk → Run を混ぜる）、どこからでも [T] で Look（1回見回して Idle へ）
+    constexpr float kMoveThreshold = 0.05f;
+    foxAnimator.Initialize(fox);
+    foxAnimator.AddState("Idle", { .animation = "Survey" });
+    foxAnimator.AddState("Move", { .animation = "Walk", .blendAnimation = "Run",
+                                   .blendParameter = "Speed", .blendParameterMin = 0.3f, .blendParameterMax = 1.0f });
+    foxAnimator.AddState("Look", { .animation = "Survey", .loop = false });
+    foxAnimator.AddTransition({ .from = "Idle", .to = "Move", .blendSeconds = 0.3f,
+                                .condition = [](const AnimationStateMachine& a) { return a.GetFloat("Speed") > kMoveThreshold; } });
+    foxAnimator.AddTransition({ .from = "Move", .to = "Idle", .blendSeconds = 0.4f,
+                                .condition = [](const AnimationStateMachine& a) { return a.GetFloat("Speed") <= kMoveThreshold; } });
+    foxAnimator.AddTransition({ .from = "*", .to = "Look", .blendSeconds = 0.2f, .trigger = "Look" });
+    foxAnimator.AddTransition({ .from = "Look", .to = "Idle", .blendSeconds = 0.3f, .requireFinished = true });
+    foxAnimator.SetOnStateChanged([this](const std::string& from, const std::string& to) {
+        lastStateChange = (from.empty() ? "(開始)" : from) + " → " + to;
+    });
+}
+
+void SkinningTestScene::UpdateFoxDirectControl() {
+    Input* input = Framework::GetInstance()->GetInput();
+    const size_t count = fox->GetAnimationCount();
+    const int32_t current = fox->GetCurrentAnimationIndex();
+    // [Space] 次のアニメーションへ（今のループ設定のまま最初から）
+    if (input->TriggerKey(DIK_SPACE)) {
+        const size_t next = current < 0 ? 0 : (static_cast<size_t>(current) + 1) % count;
+        fox->PlayAnimation(next, fox->IsLooping(), foxBlendSeconds);
+    }
+    // [L] ループ ↔ 1回 を切り替えて最初から
+    if (input->TriggerKey(DIK_L)) {
+        fox->PlayAnimation(current < 0 ? 0 : static_cast<size_t>(current), !fox->IsLooping(), foxBlendSeconds);
+    }
+    // [B] つなぐ秒数を 0（すぐ切り替え）→ 0.3 → 1.0 → 0 …
+    if (input->TriggerKey(DIK_B)) {
+        foxBlendSeconds = foxBlendSeconds == 0.0f ? 0.3f : (foxBlendSeconds < 1.0f ? 1.0f : 0.0f);
+    }
+    // [N] Walk と Run を混ぜる ↔ 1本ずつ再生
+    if (input->TriggerKey(DIK_N)) {
+        if (fox->IsPlayingBlend()) {
+            fox->PlayAnimation("Walk", true, foxBlendSeconds);
+        } else {
+            fox->PlayBlend("Walk", "Run", foxBlendRate, foxBlendSeconds);
+        }
+    }
+    // [←][→] 混ぜる割合（0 = Walk、1 = Run）
+    constexpr float kRateStep = 0.1f;
+    if (input->TriggerKey(DIK_LEFT)) { foxBlendRate = (std::max)(foxBlendRate - kRateStep, 0.0f); }
+    if (input->TriggerKey(DIK_RIGHT)) { foxBlendRate = (std::min)(foxBlendRate + kRateStep, 1.0f); }
+    fox->SetBlendRate(foxBlendRate);
+}
+
+void SkinningTestScene::UpdateFoxStateMachineControl() {
+    Input* input = Framework::GetInstance()->GetInput();
+    // [←][→] Speed パラメーター（ゲームならキャラクターの移動の速さを入れる）
+    constexpr float kSpeedStep = 0.1f;
+    if (input->TriggerKey(DIK_LEFT)) { foxSpeedParameter = (std::max)(foxSpeedParameter - kSpeedStep, 0.0f); }
+    if (input->TriggerKey(DIK_RIGHT)) { foxSpeedParameter = (std::min)(foxSpeedParameter + kSpeedStep, 1.0f); }
+    foxAnimator.SetFloat("Speed", foxSpeedParameter);
+    // [T] Look トリガー（押した瞬間だけ）
+    if (input->TriggerKey(DIK_T)) {
+        foxAnimator.SetTrigger("Look");
+    }
+    foxAnimator.Update();
+}
+
 void SkinningTestScene::UpdateAnimationControl() {
     constexpr float kSpeedStep = 0.25f;
     constexpr float kMaxSpeed = 3.0f;
     Input* input = Framework::GetInstance()->GetInput();
 
     if (fox && fox->GetAnimationCount() > 0) {
-        const size_t count = fox->GetAnimationCount();
-        const int32_t current = fox->GetCurrentAnimationIndex();
-        // [Space] 次のアニメーションへ（今のループ設定のまま最初から）
-        if (input->TriggerKey(DIK_SPACE)) {
-            const size_t next = current < 0 ? 0 : (static_cast<size_t>(current) + 1) % count;
-            fox->PlayAnimation(next, fox->IsLooping());
+        // [C] 直接操作 ↔ 状態遷移で動かす
+        if (input->TriggerKey(DIK_C)) {
+            isFoxStateMachineMode = !isFoxStateMachineMode;
+            if (isFoxStateMachineMode) {
+                foxSpeedParameter = 0.0f;
+                foxAnimator.ChangeState("Idle", 0.3f);
+            } else {
+                fox->PlayAnimation(size_t{ 0 }, true, 0.3f);
+            }
         }
-        // [L] ループ ↔ 1回 を切り替えて最初から
-        if (input->TriggerKey(DIK_L)) {
-            fox->PlayAnimation(current < 0 ? 0 : static_cast<size_t>(current), !fox->IsLooping());
+        if (isFoxStateMachineMode) {
+            UpdateFoxStateMachineControl();
+        } else {
+            UpdateFoxDirectControl();
         }
     }
 
@@ -200,13 +271,26 @@ void SkinningTestScene::UpdateHeadMarker() {
 }
 
 std::string SkinningTestScene::BuildStatusText() const {
-    std::string text = std::format("速さ {:.2f}  キツネ: {}", animationSpeed, fox && fox->IsLooping() ? "ループ" : "1回");
+    std::string text = std::format("速さ {:.2f}  キツネ: {}  つなぐ {:.1f} 秒{}", animationSpeed,
+                                   fox && fox->IsLooping() ? "ループ" : "1回", foxBlendSeconds,
+                                   fox && fox->IsBlending() ? "（つないでいる途中）" : "");
+    if (isFoxStateMachineMode) {
+        text += std::format("\n状態遷移: 状態 {}（{:.1f} 秒）  Speed {:.1f}  最後の切り替え {}", foxAnimator.GetCurrentState(),
+                            foxAnimator.GetStateTime(), foxSpeedParameter, lastStateChange);
+    }
     for (const GltfEntry& entry : entries) {
         if (!entry.skinned) {
             continue;
         }
         const SkinnedObject3d& object = *entry.skinned;
         const int32_t index = object.GetCurrentAnimationIndex();
+        if (object.IsPlayingBlend()) {
+            text += std::format("\n{}: {} と {} を混ぜている  割合 {:.1f}  1周のうち {:.2f}", entry.label,
+                                object.GetAnimationName(static_cast<size_t>(index)),
+                                object.GetAnimationName(static_cast<size_t>(object.GetBlendSecondIndex())),
+                                object.GetBlendRate(), object.GetAnimationTime());
+            continue;
+        }
         if (index < 0) {
             text += std::format("\n{}: アニメーションなし", entry.label);
             continue;

@@ -7,6 +7,7 @@
 #include "Structs.h"
 #include "GltfTypes.h"
 #include "Text.h"
+#include "AnimationStateMachine.h"
 #include <memory>
 #include <string>
 #include <vector>
@@ -20,7 +21,8 @@
 /// 手前の列に左から テスト用の棒 / CesiumMan / RiggedFigure / Fox / BoxTextured（Khronos の見本、Resources/gltf/khronos/）、
 /// 奥の列に 車輪が回る CesiumMilkTruck と、ModelManager::LoadModel で読んだ動かない CesiumMan を並べる。
 /// 奥の列の真ん中は モーフターゲットで形が変わる AnimatedMorphCube。
-/// [Space] キツネのアニメーション切り替え、[L] ループ/1回、[↑][↓] 速さ、[M] モーフの重みを自分で決める。
+/// [Space] キツネのアニメーション切り替え、[L] ループ/1回、[B] つなぐ秒数、[↑][↓] 速さ、[M] モーフの重みを自分で決める、
+/// [N] キツネの Walk と Run を混ぜる、[←][→] 混ぜる割合、[C] キツネを状態遷移で動かす（[←][→] Speed、[T] Look）。
 /// カメラは右ドラッグ・ホイール・WASDQE・[R]。
 /// </summary>
 class SkinningTestScene : public BaseScene {
@@ -51,6 +53,12 @@ private:
     GltfEntry& AddStaticModel(const std::string& label, const std::string& directory, const std::string& file, const Vector3& position, float scale);
     // アニメーションの切り替え・ループ・速さのキー操作
     void UpdateAnimationControl();
+    // キツネを直接操作する（[Space][L][B][N][←][→]）
+    void UpdateFoxDirectControl();
+    // キツネを状態遷移で動かす（[←][→] で Speed、[T] で Look）
+    void UpdateFoxStateMachineControl();
+    // キツネの状態遷移を作る（Idle / Move / Look）
+    void SetupFoxAnimator();
     // 頭に付いてくる箱を、キツネの頭の骨の位置へ動かす
     void UpdateHeadMarker();
     std::string BuildStatusText() const;
@@ -58,6 +66,15 @@ private:
     std::vector<GltfEntry> entries;
     // キツネ（アニメーション3本。[Space] で切り替える）
     SkinnedObject3d* fox = nullptr;
+    // キツネのアニメーションを切り替えるときにつなぐ秒数（[B] で 0 / 0.3 / 1.0）
+    float foxBlendSeconds = 0.3f;
+    // [N] で Walk と Run を混ぜるときの割合（[←][→] で変える。0 = Walk、1 = Run）
+    float foxBlendRate = 0.5f;
+    // [C] でキツネを状態遷移（AnimationStateMachine）で動かす。そのときの Speed パラメーターは [←][→]、[T] で "Look" トリガー
+    AnimationStateMachine foxAnimator;
+    bool isFoxStateMachineMode = false;
+    float foxSpeedParameter = 0.0f;
+    std::string lastStateChange;
     // モーフで形が変わる箱（[M] で重みを自分で決める）
     SkinnedObject3d* morphCube = nullptr;
     // 0 = アニメーションのまま、1〜 = その番号のターゲットだけ重み 1
