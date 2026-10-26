@@ -20,6 +20,7 @@ void GameSettings::Load() {
 	seVolume = saveData.GetFloat("seVolume", seVolume);
 	fullscreen = saveData.GetBool("fullscreen", fullscreen);
 	SetWindowSize(saveData.GetInt("windowWidth", windowWidth), saveData.GetInt("windowHeight", windowHeight));
+	SetRenderScale(saveData.GetFloat("renderScale", renderScale));
 	mouseSensitivity = saveData.GetFloat("mouseSensitivity", mouseSensitivity);
 	eyeHeight = saveData.GetFloat("eyeHeight", eyeHeight);
 	invertY = saveData.GetBool("invertY", invertY);
@@ -34,6 +35,7 @@ bool GameSettings::Save() {
 	saveData.SetBool("fullscreen", fullscreen);
 	saveData.SetInt("windowWidth", windowWidth);
 	saveData.SetInt("windowHeight", windowHeight);
+	saveData.SetFloat("renderScale", renderScale);
 	saveData.SetFloat("mouseSensitivity", mouseSensitivity);
 	saveData.SetFloat("eyeHeight", eyeHeight);
 	saveData.SetBool("invertY", invertY);
@@ -58,6 +60,10 @@ void GameSettings::SetSeVolume(float value) {
 void GameSettings::SetWindowSize(int width, int height) {
 	windowWidth = (std::max)(width, kMinWindowWidth);
 	windowHeight = (std::max)(height, kMinWindowHeight);
+}
+
+void GameSettings::SetRenderScale(float value) {
+	renderScale = (std::clamp)(value, kRenderScaleMin, kRenderScaleMax);
 }
 
 void GameSettings::ApplyVolumes() {

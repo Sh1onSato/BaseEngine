@@ -18,7 +18,7 @@ class UIToggle;
 ///
 ///   SettingsMenu* menu = canvas.Create<SettingsMenu>("設定");
 ///   menu->SetAlignment({ 0.5f, 0.5f });
-///   menu->AddDefaultItems();                                  // 音量3つとフルスクリーン
+///   menu->AddDefaultItems();                                  // 音量3つ・描画の細かさ・フルスクリーン
 ///   menu->AddSlider({ .text = "マウス感度",
 ///                     .minValue = GameSettings::kMouseSensitivityMin, .maxValue = GameSettings::kMouseSensitivityMax,
 ///                     .getValue = [] { return GameSettings::GetInstance()->GetMouseSensitivity(); },
@@ -50,7 +50,7 @@ public:
     UISlider* AddSlider(const SliderItem& item);
     UIToggle* AddToggle(const std::string& text, std::function<bool()> getValue, std::function<void(bool)> setValue);
     UIButton* AddButton(const std::string& text, std::function<void()> onClick);
-    // よく使う項目（全体・BGM・効果音の音量とフルスクリーン）を足す
+    // よく使う項目（全体・BGM・効果音の音量、描画の細かさ（3D の解像度）、フルスクリーン）を足す
     void AddDefaultItems();
 
     void SetTitle(const std::string& text);

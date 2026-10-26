@@ -148,11 +148,8 @@ void Collision3DTest::DrawShadowPass(GameObjectManager& objects) {
 
 void Collision3DTest::RebindMainRenderTarget() {
     // PostDrawShadow() はビューポート/シザーしか戻さないので、描画先（RTV/DSV）はここで張り直す
-    // （SkinningTestScene::Draw と同じ手順）
-    DirectXCommon* dxCommon = Framework::GetInstance()->GetDxCommon();
-    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = dxCommon->GetRtvHandle(dxCommon->GetBackBufferIndex());
-    D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dxCommon->GetDsvHandle();
-    dxCommon->GetCommandList()->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
+    // （内部解像度を下げているときは小さい描画先になるので、バックバッファを直接指定しない）
+    Framework::GetInstance()->GetDxCommon()->BindMainRenderTarget();
 }
 
 std::string Collision3DTest::BuildStatusText(const GameObjectManager& objects) const {

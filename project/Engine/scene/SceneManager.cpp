@@ -5,6 +5,7 @@
 #include "Screen.h"
 #include "TextureManager.h"
 #include "ModelManager.h"
+#include "Framework.h"
 #include <algorithm>
 
 SceneManager::SceneManager() = default;
@@ -90,6 +91,8 @@ void SceneManager::Draw() {
     if (currentScene) {
         currentScene->Draw();
     }
+    // 内部解像度を下げて描いた 3D を画面に引き伸ばし、描画先をバックバッファに戻す（UI はこの後に等倍で描く）
+    Framework::GetInstance()->GetRenderScaler()->EndScene();
     // シーンが積んだスプライトをレイヤー順に描画する
     if (spriteCommon) {
         spriteCommon->Flush();

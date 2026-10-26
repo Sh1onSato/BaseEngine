@@ -30,6 +30,8 @@ void MyGame::Draw() {
 	// 描画前処理
 	dxCommon->PreDraw();
 	srvManager->PreDraw();
+	// 内部解像度を下げているなら、3D の描画先を小さい物にする（SceneManager がシーンの Draw の後で引き伸ばす）
+	renderScaler->BeginScene();
 
 	// シーンマネージャ経由で現在のシーンを描画
 	sceneManager->Draw();

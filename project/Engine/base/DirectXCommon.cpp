@@ -192,7 +192,9 @@ void DirectXCommon::PreDraw(){
     D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
     rtvHandle.ptr += backBufferIndex * rtvDescriptorSize;
     D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
-    
+    mainRtvHandle = rtvHandle;
+    mainDsvHandle = dsvHandle;
+
     commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
 
     // 画面をクリア。ビューポートがバックバッファ全体でないとき（レターボックス）は、
@@ -211,6 +213,27 @@ void DirectXCommon::PreDraw(){
     // 共通の描画設定
     commandList->RSSetViewports(1, &viewport);
     commandList->RSSetScissorRects(1, &scissorRect);
+}
+
+void DirectXCommon::BindMainRenderTarget() {
+    commandList->OMSetRenderTargets(1, &mainRtvHandle, FALSE, &mainDsvHandle);
+    commandList->RSSetViewports(1, &viewport);
+    commandList->RSSetScissorRects(1, &scissorRect);
+}
+
+void DirectXCommon::SetMainRenderTarget(D3D12_CPU_DESCRIPTOR_HANDLE rtv, D3D12_CPU_DESCRIPTOR_HANDLE dsv,
+                                        const D3D12_VIEWPORT& newViewport, const D3D12_RECT& newScissor) {
+    mainRtvHandle = rtv;
+    mainDsvHandle = dsv;
+    viewport = newViewport;
+    scissorRect = newScissor;
+    BindMainRenderTarget();
+}
+
+void DirectXCommon::ResetMainRenderTarget() {
+    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+    rtvHandle.ptr += GetBackBufferIndex() * rtvDescriptorSize;
+    SetMainRenderTarget(rtvHandle, dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), Screen::GetViewport(), Screen::GetScissorRect());
 }
 
 void DirectXCommon::PostDraw(){

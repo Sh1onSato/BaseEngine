@@ -84,6 +84,13 @@ private:
 	Microsoft::WRL::ComPtr <IDxcBlob> vertexShaderBlob = nullptr;
 	Microsoft::WRL::ComPtr <IDxcBlob> pixelShaderBlob = nullptr;
 
+	// 描く範囲（ゲーム座標）。Flush のときに今の描画先のピクセルに直す（内部解像度を下げた描画先でも合うように）
+	struct ClipArea {
+		float left;
+		float top;
+		float right;
+		float bottom;
+	};
 	// 描画キューの1要素
 	struct DrawRequest {
 		Sprite* sprite;    // 描画するスプライト
@@ -91,10 +98,12 @@ private:
 		int layer;         // 積んだ時点のレイヤー
 		uint32_t order;    // 積んだ順番（デバッグ用）
 		bool hasClip;      // 積んだ時点で PushClipRect されていたか
-		D3D12_RECT clipRect; // そのときの描く範囲（バックバッファのピクセル）
+		ClipArea clipArea; // そのときの描く範囲
 	};
-	// PushClipRect された範囲（バックバッファのピクセル。後ろほど内側で、外側と重なった部分にしてある）
-	std::vector<D3D12_RECT> clipStack;
+	// ゲーム座標の範囲を、今の描画先のピクセルの矩形にする（画面の外にはみ出た分は切る）
+	D3D12_RECT ToScissorRect(const ClipArea& area) const;
+	// PushClipRect された範囲（後ろほど内側で、外側と重なった部分にしてある）
+	std::vector<ClipArea> clipStack;
 	// 描画キュー
 	std::vector<DrawRequest> drawQueue;
 	// 積んだ順番のカウンタ（Flushでリセット）

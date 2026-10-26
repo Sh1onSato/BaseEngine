@@ -195,6 +195,9 @@
     <ClCompile Include="Engine\base\SrvManager.cpp">
       <Filter>ソース ファイル\engine\base</Filter>
     </ClCompile>
+    <ClCompile Include="Engine\base\RenderScaler.cpp">
+      <Filter>ソース ファイル\engine\base</Filter>
+    </ClCompile>
     <ClCompile Include="Engine\scene\GameScene.cpp">
       <Filter>ソース ファイル\engine\scene</Filter>
     </ClCompile>
@@ -371,6 +374,12 @@
     <FxCompile Include="Resources\shaders\Sprite.PS.hlsl">
       <Filter>シェーダーファイル</Filter>
     </FxCompile>
+    <FxCompile Include="Resources\shaders\RenderScale.VS.hlsl">
+      <Filter>シェーダーファイル</Filter>
+    </FxCompile>
+    <FxCompile Include="Resources\shaders\RenderScale.PS.hlsl">
+      <Filter>シェーダーファイル</Filter>
+    </FxCompile>
     <FxCompile Include="Resources\shaders\Particle.PS.hlsl">
       <Filter>シェーダーファイル</Filter>
     </FxCompile>
@@ -524,6 +533,9 @@
       <Filter>ヘッダー ファイル\engine\base</Filter>
     </ClInclude>
     <ClInclude Include="Engine\base\SrvManager.h">
+      <Filter>ヘッダー ファイル\engine\base</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\base\RenderScaler.h">
       <Filter>ヘッダー ファイル\engine\base</Filter>
     </ClInclude>
     <ClInclude Include="Engine\scene\BaseScene.h">

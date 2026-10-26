@@ -24,6 +24,7 @@ namespace {
     constexpr float kTitleFontSize = 28.0f;
     constexpr float kItemFontSize = 22.0f;
     constexpr float kVolumeStep = 0.05f;
+    constexpr float kRenderScaleStep = 0.25f;
     const Vector4 kMenuColor = { 0.08f, 0.09f, 0.12f, 0.94f };
 }
 
@@ -144,6 +145,17 @@ void SettingsMenu::AddDefaultItems() {
                 .step = kVolumeStep,
                 .getValue = [] { return GameSettings::GetInstance()->GetSeVolume(); },
                 .setValue = [](float value) { GameSettings::GetInstance()->SetSeVolume(value); },
+                .formatValue = FormatPercent });
+    // 3D を描く解像度（下げると重いシーンが速くなる。UI と文字は細かいまま）。RenderScaler と GameSettings の両方に入れる
+    AddSlider({ .text = "描画の細かさ",
+                .minValue = GameSettings::kRenderScaleMin,
+                .maxValue = GameSettings::kRenderScaleMax,
+                .step = kRenderScaleStep,
+                .getValue = [] { return GameSettings::GetInstance()->GetRenderScale(); },
+                .setValue = [](float value) {
+                    GameSettings::GetInstance()->SetRenderScale(value);
+                    Framework::GetInstance()->GetRenderScaler()->SetScale(value);
+                },
                 .formatValue = FormatPercent });
     // 画面の切り替えは WinApp。GameSettings にも入れておく（終了時は Framework が WinApp の状態で上書きして保存する）
     AddToggle(

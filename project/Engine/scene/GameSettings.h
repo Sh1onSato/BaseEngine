@@ -29,6 +29,9 @@ public:
 	int GetWindowWidth() const { return windowWidth; }
 	int GetWindowHeight() const { return windowHeight; }
 	void SetWindowSize(int width, int height);
+	// 3D を描く解像度の倍率（0.25〜1.0。実際の反映は RenderScaler::SetScale。Framework が起動時に反映する）
+	float GetRenderScale() const { return renderScale; }
+	void SetRenderScale(float value);
 
 	// --- 視点操作（FPS/TPS向け） ---
 	float GetMouseSensitivity() const { return mouseSensitivity; }
@@ -48,6 +51,8 @@ public:
 	static constexpr float kMouseSensitivityMax = 0.01f;
 	static constexpr float kEyeHeightMin = 0.1f;
 	static constexpr float kEyeHeightMax = 3.0f;
+	static constexpr float kRenderScaleMin = 0.25f;
+	static constexpr float kRenderScaleMax = 1.0f;
 
 	static constexpr const char* kFileName = "settings.json";
 
@@ -69,6 +74,7 @@ private:
 	// 壊れた値が保存されていてもウィンドウが消えないようにする下限
 	static constexpr int kMinWindowWidth = 320;
 	static constexpr int kMinWindowHeight = 180;
+	float renderScale = 1.0f;
 
 	float mouseSensitivity = 0.002f;
 	float eyeHeight = 1.5f;

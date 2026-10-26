@@ -217,28 +217,41 @@ void SpriteCommon::Enqueue(Sprite* sprite, uint32_t srvIndex) {
 	}
 	const bool hasClip = !clipStack.empty();
 	drawQueue.push_back({ sprite, srvIndex, sprite->GetLayer(), drawOrderCounter++, hasClip,
-		hasClip ? clipStack.back() : D3D12_RECT{} });
+		hasClip ? clipStack.back() : ClipArea{} });
 }
 
 void SpriteCommon::PushClipRect(const Rect& rect) {
-	// ゲーム座標 → バックバッファのピクセル（ゲームの絵はビューポートの範囲に描かれる）
-	const D3D12_VIEWPORT& viewport = Screen::GetViewport();
+	ClipArea area{ rect.min.x, rect.min.y, rect.max.x, rect.max.y };
+	// 外側の範囲と重なった部分だけにする
+	if (!clipStack.empty()) {
+		const ClipArea& outer = clipStack.back();
+		area.left = (std::max)(area.left, outer.left);
+		area.top = (std::max)(area.top, outer.top);
+		area.right = (std::max)((std::min)(area.right, outer.right), area.left);
+		area.bottom = (std::max)((std::min)(area.bottom, outer.bottom), area.top);
+	}
+	clipStack.push_back(area);
+}
+
+D3D12_RECT SpriteCommon::ToScissorRect(const ClipArea& area) const {
+	// ゲーム座標 → 今の描画先のピクセル（ゲームの絵はビューポートの範囲に描かれる）
+	const D3D12_VIEWPORT& viewport = dxCommon->GetViewport();
 	const Vector2 gameSize = Screen::GetGameSize();
 	const float scaleX = viewport.Width / gameSize.x;
 	const float scaleY = viewport.Height / gameSize.y;
 	D3D12_RECT pixelRect{
-		std::lround(viewport.TopLeftX + rect.min.x * scaleX),
-		std::lround(viewport.TopLeftY + rect.min.y * scaleY),
-		std::lround(viewport.TopLeftX + rect.max.x * scaleX),
-		std::lround(viewport.TopLeftY + rect.max.y * scaleY),
+		std::lround(viewport.TopLeftX + area.left * scaleX),
+		std::lround(viewport.TopLeftY + area.top * scaleY),
+		std::lround(viewport.TopLeftX + area.right * scaleX),
+		std::lround(viewport.TopLeftY + area.bottom * scaleY),
 	};
-	// 外側の範囲（無ければ画面）と重なった部分だけにする
-	const D3D12_RECT& outer = clipStack.empty() ? Screen::GetScissorRect() : clipStack.back();
+	// 画面（今のシザー矩形）からはみ出た分は切る
+	const D3D12_RECT& outer = dxCommon->GetScissorRect();
 	pixelRect.left = (std::max)(pixelRect.left, outer.left);
 	pixelRect.top = (std::max)(pixelRect.top, outer.top);
 	pixelRect.right = (std::max)((std::min)(pixelRect.right, outer.right), pixelRect.left);
 	pixelRect.bottom = (std::max)((std::min)(pixelRect.bottom, outer.bottom), pixelRect.top);
-	clipStack.push_back(pixelRect);
+	return pixelRect;
 }
 
 void SpriteCommon::PopClipRect() {
@@ -267,7 +280,7 @@ void SpriteCommon::Flush() {
 		return a.left == b.left && a.top == b.top && a.right == b.right && a.bottom == b.bottom;
 	};
 	for (const DrawRequest& request : drawQueue) {
-		const D3D12_RECT& scissor = request.hasClip ? request.clipRect : defaultScissor;
+		const D3D12_RECT scissor = request.hasClip ? ToScissorRect(request.clipArea) : defaultScissor;
 		if (!isSameRect(scissor, currentScissor)) {
 			commandList->RSSetScissorRects(1, &scissor);
 			currentScissor = scissor;

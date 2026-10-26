@@ -102,9 +102,19 @@ public:
     ID3D12Resource* GetDepthStencilResource() const { return depthStencilResource.Get(); }
 
     // --- ビューポート・シザー矩形 ---
-    // バックバッファ内でゲームの絵を描く範囲（Screenのレイアウトを毎フレームPreDrawで取り込んだもの）
+    // 今の描画先でゲームの絵を描く範囲（普段はバックバッファ内の Screen のレイアウト。
+    // 内部解像度を下げて 3D を描いている間は、その小さい描画先の全体）
     const D3D12_VIEWPORT& GetViewport() const { return viewport; }
     const D3D12_RECT& GetScissorRect() const { return scissorRect; }
+
+    // --- メインの描画先 ---
+    // 3D・スプライトを描く今の描画先を、もう一度設定する（シャドウパスなどで別の描画先にした後に呼ぶ）
+    void BindMainRenderTarget();
+    // メインの描画先を差し替えて設定する（RenderScaler が内部解像度を下げるときに使う）
+    void SetMainRenderTarget(D3D12_CPU_DESCRIPTOR_HANDLE rtv, D3D12_CPU_DESCRIPTOR_HANDLE dsv,
+                             const D3D12_VIEWPORT& newViewport, const D3D12_RECT& newScissor);
+    // メインの描画先をバックバッファ（PreDraw と同じ）に戻して設定する
+    void ResetMainRenderTarget();
     // 現在のバックバッファのサイズ
     uint32_t GetBackBufferWidth() const { return backBufferWidth; }
     uint32_t GetBackBufferHeight() const { return backBufferHeight; }
@@ -166,6 +176,9 @@ private:
     Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature;
     D3D12_VIEWPORT viewport{};
     D3D12_RECT scissorRect{};
+    // 今のメインの描画先（BindMainRenderTarget で設定する物）
+    D3D12_CPU_DESCRIPTOR_HANDLE mainRtvHandle{};
+    D3D12_CPU_DESCRIPTOR_HANDLE mainDsvHandle{};
 
     D3D12_RENDER_TARGET_VIEW_DESC rtvDesc{};
     uint32_t rtvDescriptorSize;

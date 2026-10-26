@@ -2,6 +2,7 @@
 #include "WinApp.h"
 #include "DirectXCommon.h"
 #include "SrvManager.h"
+#include "RenderScaler.h"
 #include "Input.h"
 #include "TextureManager.h"
 #include "SpriteCommon.h"
@@ -52,11 +53,14 @@ public:
 	ParticleCommon* GetParticleCommon() const { return particleCommon.get(); }
 	SkyboxCommon* GetSkyboxCommon() const { return skyboxCommon.get(); }
 	SceneManager* GetSceneManager() const { return sceneManager.get(); }
+	RenderScaler* GetRenderScaler() const { return renderScaler.get(); }
 
 protected:
 	std::unique_ptr<WinApp> winApp = nullptr;
 	std::unique_ptr<DirectXCommon> dxCommon = nullptr;
 	std::unique_ptr<SrvManager> srvManager = nullptr;
+	// 内部解像度スケール（3D を小さい解像度で描いて引き伸ばす）
+	std::unique_ptr<RenderScaler> renderScaler = nullptr;
 	std::unique_ptr<Input> input = nullptr;
 	
 	// これらはゲーム側で使う可能性が高いので protected に配置

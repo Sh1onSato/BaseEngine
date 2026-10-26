@@ -380,7 +380,6 @@ void SkinningTestScene::Draw() {
     Framework* framework = Framework::GetInstance();
     DirectXCommon* dxCommon = framework->GetDxCommon();
     Object3dCommon* object3dCommon = framework->GetObject3dCommon();
-    auto commandList = dxCommon->GetCommandList();
 
     // --- シャドウパス（ライト視点の深度のみ描画） ---
     object3dCommon->PreDrawShadow();
@@ -393,10 +392,8 @@ void SkinningTestScene::Draw() {
     object3dCommon->PostDrawShadow();
 
     // PostDrawShadow()はビューポート/シザーのみ復元するため、メインのレンダーターゲット(RTV/DSV)は
-    // ここで明示的に張り直す必要がある（dxCommon->PreDraw()で最初に設定されたものと同じ場所に戻す）
-    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = dxCommon->GetRtvHandle(dxCommon->GetBackBufferIndex());
-    D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dxCommon->GetDsvHandle();
-    commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
+    // ここで明示的に張り直す必要がある（内部解像度を下げているときは小さい描画先になるので、バックバッファを直接指定しない）
+    dxCommon->BindMainRenderTarget();
 
     // --- 通常の描画パス ---
     object3dCommon->PreDraw();

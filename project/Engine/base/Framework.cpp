@@ -61,6 +61,11 @@ void Framework::Initialize() {
 	TextureManager::GetInstance()->Initialize(dxCommon.get(), srvManager.get());
 	ModelManager::GetInstance()->Initialize(dxCommon.get());
 
+	renderScaler = std::make_unique<RenderScaler>();
+	renderScaler->Initialize(dxCommon.get(), srvManager.get());
+	// 保存済みの「描画の細かさ」を反映する（[F9] で変えた倍率は確認用なので保存しない）
+	renderScaler->SetScale(GameSettings::GetInstance()->GetRenderScale());
+
 	spriteCommon = std::make_unique<SpriteCommon>();
 	spriteCommon->Initialize(dxCommon.get(), srvManager.get());
 
@@ -108,6 +113,12 @@ void Framework::Update() {
 	AudioManager::GetInstance()->Update(Time::GetUnscaledDeltaTime());
 #ifdef _DEBUG
 	ImGuiManager::GetInstance()->Begin();
+	// [F9] 内部解像度の倍率を 1.0 → 0.75 → 0.5 → 0.25 → 1.0 … と切り替える（重さ・見え方の確認用）
+	if (input->TriggerKey(DIK_F9)) {
+		const float scale = renderScaler->GetScale();
+		renderScaler->SetScale(scale > 0.9f ? 0.75f : (scale > 0.6f ? 0.5f : (scale > 0.3f ? 0.25f : 1.0f)));
+		Logger::Log(std::format("RenderScaler: 内部解像度の倍率 {:.2f}\n", renderScaler->GetScale()));
+	}
 #endif
 	sceneManager->Update();
 }
