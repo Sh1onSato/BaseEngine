@@ -157,16 +157,19 @@ void RenderScaler::EnsureTarget(uint32_t width, uint32_t height) {
 
 void RenderScaler::BeginScene() {
     const D3D12_VIEWPORT& screenViewport = Screen::GetViewport();
-    isSceneScaled = scale < kMaxScale;
-    if (!isSceneScaled) {
+    // 倍率が 1 でも、画面の効果を掛けるフレームは別の描画先に描いてから写す
+    const bool isScaled = scale < kMaxScale;
+    isOffscreen = isScaled || (postProcess && postProcess->IsActive());
+    if (!isOffscreen) {
         renderWidth = static_cast<uint32_t>(screenViewport.Width);
         renderHeight = static_cast<uint32_t>(screenViewport.Height);
         return;
     }
 
     // ゲームの絵の大きさ × 倍率 の描画先に描く（縦横比は変わらないので、カメラ・スプライトの座標はそのまま）
-    renderWidth = (std::max)(1u, static_cast<uint32_t>(std::lround(screenViewport.Width * scale)));
-    renderHeight = (std::max)(1u, static_cast<uint32_t>(std::lround(screenViewport.Height * scale)));
+    const float appliedScale = isScaled ? scale : kMaxScale;
+    renderWidth = (std::max)(1u, static_cast<uint32_t>(std::lround(screenViewport.Width * appliedScale)));
+    renderHeight = (std::max)(1u, static_cast<uint32_t>(std::lround(screenViewport.Height * appliedScale)));
     EnsureTarget(renderWidth, renderHeight);
 
     ID3D12GraphicsCommandList* commandList = dxCommon->GetCommandList();
@@ -186,16 +189,21 @@ void RenderScaler::BeginScene() {
 }
 
 void RenderScaler::EndScene() {
-    if (!isSceneScaled) {
+    if (!isOffscreen) {
         return;
     }
-    isSceneScaled = false;
+    isOffscreen = false;
 
     ID3D12GraphicsCommandList* commandList = dxCommon->GetCommandList();
     Transition(commandList, colorResource.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
     // バックバッファのゲームの絵の範囲（黒帯の内側）に引き伸ばして描く
     dxCommon->ResetMainRenderTarget();
+    if (postProcess && postProcess->IsActive()) {
+        // 画面の効果を掛けながら写す（引き伸ばしも PostProcess の最後の段で行う）
+        postProcess->Render(srvIndex, renderWidth, renderHeight, filter == Filter::kPoint);
+        return;
+    }
     commandList->SetGraphicsRootSignature(rootSignature.Get());
     commandList->SetPipelineState(pipelineState.Get());
     ID3D12DescriptorHeap* heaps[] = { srvManager->GetDescriptorHeap() };

@@ -1,661 +1,295 @@
 #include "PostProcess.h"
-#include "ShaderCompiler.h"
 #include "Logger.h"
-#include "externals/imgui/imgui.h"
 #include "Screen.h"
+#include "ShaderCompiler.h"
 #include <algorithm>
-#include <cassert>
 #include <format>
+#ifdef _DEBUG
+#include "externals/imgui/imgui.h"
+#endif
 
-using namespace ShaderCompiler;
+namespace {
+    // 3D の描画先と同じ色の形式（RenderScaler・Object3d などの PSO と同じ）
+    constexpr DXGI_FORMAT kColorFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+    constexpr DXGI_FORMAT kDepthFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    // ブルームは2回ぼかして広くにじませる
+    constexpr int kBloomBlurIterations = 2;
 
-void PostProcess::Initialize(DirectXCommon* dxCommon, SrvManager* srvManager) {
-    this->dxCommon = dxCommon;
-    this->srvManager = srvManager;
-
-    // オフスクリーンのサイズはバックバッファに合わせる（リサイズ後の作り直しは未対応）
-    fullWidth = Screen::GetBackBufferWidth();
-    fullHeight = Screen::GetBackBufferHeight();
-    bloomWidth = (std::max)(fullWidth / 2, 1u);
-    bloomHeight = (std::max)(fullHeight / 2, 1u);
-
-    // 1. テクスチャリソースの設定（フル解像度シーン）
-    D3D12_RESOURCE_DESC desc{};
-    desc.Width = fullWidth;
-    desc.Height = fullHeight;
-    desc.MipLevels = 1;
-    desc.DepthOrArraySize = 1;
-    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-    desc.SampleDesc.Count = 1;
-    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
-
-    D3D12_HEAP_PROPERTIES heapProps{};
-    heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
-
-    D3D12_CLEAR_VALUE clearValue{};
-    clearValue.Format = desc.Format;
-    for (int i = 0; i < 4; ++i) clearValue.Color[i] = DirectXCommon::kClearColor[i];
-
-    HRESULT hr = dxCommon->GetDevice()->CreateCommittedResource(
-        &heapProps, D3D12_HEAP_FLAG_NONE, &desc,
-        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, &clearValue, IID_PPV_ARGS(&resource)
-    );
-    Logger::CheckHResult(hr, "PostProcess: CreateCommittedResource(scene)");
-
-    // 2. RTVの作成
-    rtvIndex = kSceneRtvIndex;
-    D3D12_RENDER_TARGET_VIEW_DESC rtvDesc{};
-    rtvDesc.Format = desc.Format;
-    rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
-    dxCommon->GetDevice()->CreateRenderTargetView(resource.Get(), &rtvDesc, dxCommon->GetRtvHandle(rtvIndex));
-
-    // 3. SRVの作成
-    srvIndex = srvManager->Allocate();
-    srvManager->CreateSRVForTexture2D(srvIndex, resource.Get(), desc.Format, 1);
-
-    // 4. ブルーム用の半解像度テクスチャ3枚（輝度抽出／水平ブラー／垂直ブラー=最終ブルーム）
-    brightnessResource = CreateBloomTexture(bloomWidth, bloomHeight, kBrightnessRtvIndex, brightnessSrvIndex);
-    blurHResource = CreateBloomTexture(bloomWidth, bloomHeight, kBlurHRtvIndex, blurHSrvIndex);
-    blurVResource = CreateBloomTexture(bloomWidth, bloomHeight, kBlurVRtvIndex, blurVSrvIndex);
-
-    // 4.5. 画面全体ぼかし用のフル解像度テクスチャ2枚（水平ブラー／垂直ブラー=最終ぼかし）
-    fullBlurHResource = CreateBloomTexture(fullWidth, fullHeight, kFullBlurHRtvIndex, fullBlurHSrvIndex);
-    fullBlurVResource = CreateBloomTexture(fullWidth, fullHeight, kFullBlurVRtvIndex, fullBlurVSrvIndex);
-
-    // 半解像度パス共通のビューポート・シザー矩形
-    bloomViewport.TopLeftX = 0.0f;
-    bloomViewport.TopLeftY = 0.0f;
-    bloomViewport.Width = static_cast<float>(bloomWidth);
-    bloomViewport.Height = static_cast<float>(bloomHeight);
-    bloomViewport.MinDepth = 0.0f;
-    bloomViewport.MaxDepth = 1.0f;
-
-    bloomScissorRect.left = 0;
-    bloomScissorRect.top = 0;
-    bloomScissorRect.right = static_cast<LONG>(bloomWidth);
-    bloomScissorRect.bottom = static_cast<LONG>(bloomHeight);
-
-    // 5. パイプライン生成
-    CreateGraphicsPipeline();
-    CreateExtractPipeline();
-    CreateBlurPipeline();
-
-    // 6. 頂点リソースの作成 (画面全体を覆う板ポリ)
-    vertexResource = dxCommon->CreatBufferResource(sizeof(VertexData) * 4);
-    vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
-    vertexBufferView.SizeInBytes = sizeof(VertexData) * 4;
-    vertexBufferView.StrideInBytes = sizeof(VertexData);
-
-    VertexData* vertexData = nullptr;
-    Logger::CheckHResult(vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&vertexData)), "PostProcess: Map vertexResource");
-    // NDC座標系 (-1.0 ～ 1.0)
-    vertexData[0] = { {-1.0f, -1.0f, 0.0f, 1.0f}, {0.0f, 1.0f}, {0.0f, 0.0f, -1.0f} }; // 左下
-    vertexData[1] = { {-1.0f,  1.0f, 0.0f, 1.0f}, {0.0f, 0.0f}, {0.0f, 0.0f, -1.0f} }; // 左上
-    vertexData[2] = { { 1.0f, -1.0f, 0.0f, 1.0f}, {1.0f, 1.0f}, {0.0f, 0.0f, -1.0f} }; // 右下
-    vertexData[3] = { { 1.0f,  1.0f, 0.0f, 1.0f}, {1.0f, 0.0f}, {0.0f, 0.0f, -1.0f} }; // 右上
-    vertexResource->Unmap(0, nullptr);
+    void Transition(ID3D12GraphicsCommandList* commandList, ID3D12Resource* resource,
+                    D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after) {
+        D3D12_RESOURCE_BARRIER barrier{};
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Transition.pResource = resource;
+        barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barrier.Transition.StateBefore = before;
+        barrier.Transition.StateAfter = after;
+        commandList->ResourceBarrier(1, &barrier);
+    }
 }
 
-Microsoft::WRL::ComPtr<ID3D12Resource> PostProcess::CreateBloomTexture(uint32_t width, uint32_t height, uint32_t rtvIdx, uint32_t& outSrvIndex) {
-    // ブルーム／画面全体ぼかし用テクスチャは全て同一フォーマットのため手順を共通化（解像度のみ引数化）
+bool PostEffectSettings::IsActive() const {
+    return (bloomEnabled && bloomIntensity > 0.0f) || blur > 0.0f ||
+           brightness != 0.0f || contrast != 1.0f || saturation != 1.0f || sepia > 0.0f ||
+           tint.x != 1.0f || tint.y != 1.0f || tint.z != 1.0f || vignetteIntensity > 0.0f;
+}
+
+void PostProcess::Initialize(DirectXCommon* newDxCommon, SrvManager* newSrvManager) {
+    dxCommon = newDxCommon;
+    srvManager = newSrvManager;
+
+    for (int i = 0; i < kTargetCount; ++i) {
+        targets[i].rtvIndex = kFirstRtvIndex + static_cast<uint32_t>(i);
+        targets[i].srvIndex = srvManager->Allocate();
+    }
+
+    CreateRootSignature();
+    extractPipeline = CreatePipeline(L"Resources/shaders/BrightnessExtract.PS.hlsl");
+    blurPipeline = CreatePipeline(L"Resources/shaders/GaussianBlur.PS.hlsl");
+    compositePipeline = CreatePipeline(L"Resources/shaders/PostProcess.PS.hlsl");
+}
+
+void PostProcess::SetDefaultSettings(const PostEffectSettings& newDefault) {
+    defaultSettings = newDefault;
+    settings = newDefault;
+}
+
+void PostProcess::CreateRootSignature() {
+    D3D12_DESCRIPTOR_RANGE ranges[2] = {};
+    for (uint32_t i = 0; i < 2; ++i) {
+        ranges[i].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+        ranges[i].NumDescriptors = 1;
+        ranges[i].BaseShaderRegister = i; // t0, t1
+        ranges[i].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+    }
+    // t0 と t1 は SRV の番号が続いているとは限らないので、別々のテーブルにする
+    D3D12_ROOT_PARAMETER parameters[3] = {};
+    for (uint32_t i = 0; i < 2; ++i) {
+        parameters[i].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        parameters[i].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+        parameters[i].DescriptorTable.pDescriptorRanges = &ranges[i];
+        parameters[i].DescriptorTable.NumDescriptorRanges = 1;
+    }
+    parameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+    parameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    parameters[2].Constants.ShaderRegister = 0;
+    parameters[2].Constants.Num32BitValues = kRootConstantCount;
+
+    D3D12_STATIC_SAMPLER_DESC samplers[2] = {};
+    const D3D12_FILTER filters[2] = { D3D12_FILTER_MIN_MAG_MIP_LINEAR, D3D12_FILTER_MIN_MAG_MIP_POINT };
+    for (uint32_t i = 0; i < 2; ++i) {
+        samplers[i].Filter = filters[i];
+        samplers[i].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+        samplers[i].AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+        samplers[i].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+        samplers[i].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+        samplers[i].MaxLOD = D3D12_FLOAT32_MAX;
+        samplers[i].ShaderRegister = i; // s0 なめらか、s1 くっきり
+        samplers[i].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    }
+
+    D3D12_ROOT_SIGNATURE_DESC rootDesc{};
+    rootDesc.pParameters = parameters;
+    rootDesc.NumParameters = _countof(parameters);
+    rootDesc.pStaticSamplers = samplers;
+    rootDesc.NumStaticSamplers = _countof(samplers);
+    Microsoft::WRL::ComPtr<ID3DBlob> signatureBlob;
+    Microsoft::WRL::ComPtr<ID3DBlob> errorBlob;
+    HRESULT hr = D3D12SerializeRootSignature(&rootDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signatureBlob, &errorBlob);
+    if (FAILED(hr) && errorBlob) {
+        Logger::Log(reinterpret_cast<char*>(errorBlob->GetBufferPointer()));
+    }
+    Logger::CheckHResult(hr, "PostProcess: D3D12SerializeRootSignature");
+    hr = dxCommon->GetDevice()->CreateRootSignature(0, signatureBlob->GetBufferPointer(), signatureBlob->GetBufferSize(),
+                                                    IID_PPV_ARGS(&rootSignature));
+    Logger::CheckHResult(hr, "PostProcess: CreateRootSignature");
+}
+
+Microsoft::WRL::ComPtr<ID3D12PipelineState> PostProcess::CreatePipeline(const wchar_t* pixelShaderPath) {
+    Microsoft::WRL::ComPtr<IDxcUtils> dxcUtils;
+    Microsoft::WRL::ComPtr<IDxcCompiler3> dxcCompiler;
+    Microsoft::WRL::ComPtr<IDxcIncludeHandler> includeHandler;
+    Logger::CheckHResult(DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxcUtils)), "PostProcess: DxcCreateInstance(DxcUtils)");
+    Logger::CheckHResult(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxcCompiler)), "PostProcess: DxcCreateInstance(DxcCompiler)");
+    Logger::CheckHResult(dxcUtils->CreateDefaultIncludeHandler(&includeHandler), "PostProcess: CreateDefaultIncludeHandler");
+    // 頂点は RenderScaler と同じく、画面を覆う三角形1枚を頂点番号から作る
+    Microsoft::WRL::ComPtr<IDxcBlob> vertexShader = ShaderCompiler::CompileShader(
+        L"Resources/shaders/RenderScale.VS.hlsl", L"vs_6_0", dxcUtils.Get(), dxcCompiler.Get(), includeHandler.Get(), std::cout);
+    Microsoft::WRL::ComPtr<IDxcBlob> pixelShader = ShaderCompiler::CompileShader(
+        pixelShaderPath, L"ps_6_0", dxcUtils.Get(), dxcCompiler.Get(), includeHandler.Get(), std::cout);
+    if (!vertexShader || !pixelShader) {
+        Logger::Fatal("PostProcess: シェーダーのコンパイルに失敗しました");
+    }
+
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC desc{};
+    desc.pRootSignature = rootSignature.Get();
+    desc.VS = { vertexShader->GetBufferPointer(), vertexShader->GetBufferSize() };
+    desc.PS = { pixelShader->GetBufferPointer(), pixelShader->GetBufferSize() };
+    desc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+    desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+    desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+    desc.NumRenderTargets = 1;
+    desc.RTVFormats[0] = kColorFormat;
+    // 最後の合成はバックバッファと深度が一緒に設定されているので形式だけ合わせる（深度は使わない）
+    desc.DSVFormat = kDepthFormat;
+    desc.DepthStencilState.DepthEnable = FALSE;
+    desc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+    desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+    desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    desc.SampleDesc.Count = 1;
+    desc.SampleMask = D3D12_DEFAULT_SAMPLE_MASK;
+    Microsoft::WRL::ComPtr<ID3D12PipelineState> pipeline;
+    HRESULT hr = dxCommon->GetDevice()->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pipeline));
+    Logger::CheckHResult(hr, "PostProcess: CreateGraphicsPipelineState");
+    return pipeline;
+}
+
+void PostProcess::EnsureTargets(uint32_t width, uint32_t height) {
+    if (targets[0].resource && width == sourceWidth && height == sourceHeight) {
+        return;
+    }
+    // ブルームは軽くするため半分の解像度で行う（ぼかすので細かさは要らない）
+    const uint32_t halfWidth = (std::max)(1u, width / 2);
+    const uint32_t halfHeight = (std::max)(1u, height / 2);
+    CreateTarget(targets[kBright], halfWidth, halfHeight);
+    CreateTarget(targets[kBloomPing], halfWidth, halfHeight);
+    CreateTarget(targets[kBloomPong], halfWidth, halfHeight);
+    CreateTarget(targets[kBlurPing], width, height);
+    CreateTarget(targets[kBlurPong], width, height);
+    sourceWidth = width;
+    sourceHeight = height;
+}
+
+void PostProcess::CreateTarget(Target& target, uint32_t width, uint32_t height) {
+    // 前のフレームの描画は PostDraw で GPU の完了を待っているので、古い絵はすぐ捨ててよい
     D3D12_RESOURCE_DESC desc{};
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
     desc.Width = width;
     desc.Height = height;
-    desc.MipLevels = 1;
     desc.DepthOrArraySize = 1;
-    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+    desc.MipLevels = 1;
+    desc.Format = kColorFormat;
     desc.SampleDesc.Count = 1;
-    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
     desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
-
-    D3D12_HEAP_PROPERTIES heapProps{};
-    heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
-
+    D3D12_HEAP_PROPERTIES heapProperties{};
+    heapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
     D3D12_CLEAR_VALUE clearValue{};
-    clearValue.Format = desc.Format;
-    for (int i = 0; i < 4; ++i) clearValue.Color[i] = DirectXCommon::kClearColor[i];
-
-    Microsoft::WRL::ComPtr<ID3D12Resource> texture;
-    HRESULT hr = dxCommon->GetDevice()->CreateCommittedResource(
-        &heapProps, D3D12_HEAP_FLAG_NONE, &desc,
-        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, &clearValue, IID_PPV_ARGS(&texture)
-    );
-    Logger::CheckHResult(hr, std::format("PostProcess: CreateCommittedResource(bloom/blur texture {}x{}, rtv {})", width, height, rtvIdx));
+    clearValue.Format = kColorFormat;
+    // 普段は「絵として読む」状態にしておき、描くときだけ描画先の状態にする
+    HRESULT hr = dxCommon->GetDevice()->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAG_NONE, &desc,
+        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, &clearValue, IID_PPV_ARGS(&target.resource));
+    Logger::CheckHResult(hr, std::format("PostProcess: CreateCommittedResource({}x{})", width, height));
 
     D3D12_RENDER_TARGET_VIEW_DESC rtvDesc{};
-    rtvDesc.Format = desc.Format;
+    rtvDesc.Format = kColorFormat;
     rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
-    dxCommon->GetDevice()->CreateRenderTargetView(texture.Get(), &rtvDesc, dxCommon->GetRtvHandle(rtvIdx));
-
-    outSrvIndex = srvManager->Allocate();
-    srvManager->CreateSRVForTexture2D(outSrvIndex, texture.Get(), desc.Format, 1);
-
-    return texture;
+    dxCommon->GetDevice()->CreateRenderTargetView(target.resource.Get(), &rtvDesc, dxCommon->GetRtvHandle(target.rtvIndex));
+    srvManager->CreateSRVForTexture2D(target.srvIndex, target.resource.Get(), kColorFormat, 1);
+    target.width = width;
+    target.height = height;
 }
 
-void PostProcess::CreateGraphicsPipeline() {
-    auto device = dxCommon->GetDevice();
+void PostProcess::DrawPass(ID3D12PipelineState* pipeline, uint32_t sourceSrvIndex, Target& target,
+                           const float* constants, uint32_t constantCount) {
+    ID3D12GraphicsCommandList* commandList = dxCommon->GetCommandList();
+    Transition(commandList, target.resource.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
-    // --- 1. RootSignature の作成 ---
-    // t0=シーン, t1=ブルーム を別々のテーブルにする（SrvManager::Allocate()のインデックスが
-    // 連続する保証がないため、1テーブルに2レンジまとめると誤ったディスクリプタを参照してしまう）
-    D3D12_DESCRIPTOR_RANGE sceneRange[1] = {};
-    sceneRange[0].BaseShaderRegister = 0; // t0
-    sceneRange[0].NumDescriptors = 1;
-    sceneRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-    sceneRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+    const D3D12_CPU_DESCRIPTOR_HANDLE rtv = dxCommon->GetRtvHandle(target.rtvIndex);
+    commandList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
+    const D3D12_VIEWPORT viewport{ 0.0f, 0.0f, static_cast<float>(target.width), static_cast<float>(target.height), 0.0f, 1.0f };
+    const D3D12_RECT scissor{ 0, 0, static_cast<LONG>(target.width), static_cast<LONG>(target.height) };
+    commandList->RSSetViewports(1, &viewport);
+    commandList->RSSetScissorRects(1, &scissor);
 
-    D3D12_DESCRIPTOR_RANGE bloomRange[1] = {};
-    bloomRange[0].BaseShaderRegister = 1; // t1
-    bloomRange[0].NumDescriptors = 1;
-    bloomRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-    bloomRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+    commandList->SetPipelineState(pipeline);
+    commandList->SetGraphicsRootDescriptorTable(0, srvManager->GetGPUDescriptorHandle(sourceSrvIndex));
+    // t1 は合成の段しか使わないが、テーブルを空にはできないので同じ絵を入れておく
+    commandList->SetGraphicsRootDescriptorTable(1, srvManager->GetGPUDescriptorHandle(sourceSrvIndex));
+    commandList->SetGraphicsRoot32BitConstants(2, constantCount, constants, 0);
+    commandList->DrawInstanced(3, 1, 0, 0);
 
-    D3D12_DESCRIPTOR_RANGE fullBlurRange[1] = {};
-    fullBlurRange[0].BaseShaderRegister = 2; // t2
-    fullBlurRange[0].NumDescriptors = 1;
-    fullBlurRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-    fullBlurRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+    Transition(commandList, target.resource.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+}
 
-    D3D12_ROOT_PARAMETER rootParameters[4] = {};
-    rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[0].DescriptorTable.pDescriptorRanges = sceneRange;
-    rootParameters[0].DescriptorTable.NumDescriptorRanges = 1;
+void PostProcess::Blur(uint32_t sourceSrvIndex, Target& ping, Target& result, float radius) {
+    // GaussianBlur.PS.hlsl の b0: 1 回にずらす量（UV）。横 → 縦の2回に分けるとずっと軽い。
+    // 幅は「画面（黒帯の内側）の 1 ピクセル × radius」にする（内部解像度を下げても、ぼけ方が画面上で同じになるように）
+    const D3D12_VIEWPORT& screenViewport = Screen::GetViewport();
+    const float horizontal[2] = { radius / (std::max)(screenViewport.Width, 1.0f), 0.0f };
+    const float vertical[2] = { 0.0f, radius / (std::max)(screenViewport.Height, 1.0f) };
+    DrawPass(blurPipeline.Get(), sourceSrvIndex, ping, horizontal, 2);
+    DrawPass(blurPipeline.Get(), ping.srvIndex, result, vertical, 2);
+}
 
-    rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[1].DescriptorTable.pDescriptorRanges = bloomRange;
-    rootParameters[1].DescriptorTable.NumDescriptorRanges = 1;
+void PostProcess::Render(uint32_t sourceSrvIndex, uint32_t width, uint32_t height, bool usePointFilter) {
+    EnsureTargets(width, height);
+    ID3D12GraphicsCommandList* commandList = dxCommon->GetCommandList();
+    commandList->SetGraphicsRootSignature(rootSignature.Get());
+    commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    ID3D12DescriptorHeap* heaps[] = { srvManager->GetDescriptorHeap() };
+    commandList->SetDescriptorHeaps(1, heaps);
 
-    rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[2].DescriptorTable.pDescriptorRanges = fullBlurRange;
-    rootParameters[2].DescriptorTable.NumDescriptorRanges = 1;
-
-    rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-    rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[3].Constants.ShaderRegister = 0; // b0: bloomIntensity, grayscaleフラグ, sepiaフラグ, blurEnabledフラグ, vignetteIntensity, vignetteRadius, damageVignetteIntensity
-    rootParameters[3].Constants.Num32BitValues = 7;
-
-    D3D12_STATIC_SAMPLER_DESC staticSamplers[1] = {};
-    staticSamplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
-    staticSamplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-    staticSamplers[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-    staticSamplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-    staticSamplers[0].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
-    staticSamplers[0].MaxLOD = D3D12_FLOAT32_MAX;
-    staticSamplers[0].ShaderRegister = 0; // s0
-    staticSamplers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-
-    D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc{};
-    rootSignatureDesc.pParameters = rootParameters;
-    rootSignatureDesc.NumParameters = _countof(rootParameters);
-    rootSignatureDesc.pStaticSamplers = staticSamplers;
-    rootSignatureDesc.NumStaticSamplers = _countof(staticSamplers);
-    rootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-
-    Microsoft::WRL::ComPtr<ID3DBlob> signatureBlob;
-    Microsoft::WRL::ComPtr<ID3DBlob> errorBlob;
-    HRESULT hr = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signatureBlob, &errorBlob);
-    if (FAILED(hr) && errorBlob) {
-        Logger::Log(reinterpret_cast<char*>(errorBlob->GetBufferPointer()));
+    // 1. ブルーム: 明るい所だけ取り出して（半分の解像度に縮めながら）、ぼかす
+    const bool useBloom = settings.bloomEnabled && settings.bloomIntensity > 0.0f;
+    if (useBloom) {
+        const float threshold[1] = { settings.bloomThreshold };
+        DrawPass(extractPipeline.Get(), sourceSrvIndex, targets[kBright], threshold, 1);
+        uint32_t bloomSource = targets[kBright].srvIndex;
+        for (int i = 0; i < kBloomBlurIterations; ++i) {
+            // 半分の解像度でぼかすので、等倍のときと同じ広がりになるよう幅を倍にする
+            Blur(bloomSource, targets[kBloomPing], targets[kBloomPong], settings.bloomRadius * 2.0f);
+            bloomSource = targets[kBloomPong].srvIndex;
+        }
     }
-    Logger::CheckHResult(hr, "PostProcess: D3D12SerializeRootSignature(composite)");
-    hr = device->CreateRootSignature(0, signatureBlob->GetBufferPointer(), signatureBlob->GetBufferSize(), IID_PPV_ARGS(&compositeRootSignature));
-    Logger::CheckHResult(hr, "PostProcess: CreateRootSignature(composite)");
 
-    // --- 2. シェーダーのコンパイル ---
-    Microsoft::WRL::ComPtr<IDxcUtils> dxcUtils;
-    Microsoft::WRL::ComPtr<IDxcCompiler3> dxcCompiler;
-    Microsoft::WRL::ComPtr<IDxcIncludeHandler> includeHandler;
-    hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxcUtils));
-    Logger::CheckHResult(hr, "PostProcess: DxcCreateInstance(DxcUtils)");
-    hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxcCompiler));
-    Logger::CheckHResult(hr, "PostProcess: DxcCreateInstance(DxcCompiler)");
-    hr = dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
-    Logger::CheckHResult(hr, "PostProcess: CreateDefaultIncludeHandler");
+    // 2. 画面全体のぼかし（等倍）
+    uint32_t sceneSrvIndex = sourceSrvIndex;
+    if (settings.blur > 0.0f) {
+        Blur(sourceSrvIndex, targets[kBlurPing], targets[kBlurPong], settings.blur);
+        sceneSrvIndex = targets[kBlurPong].srvIndex;
+    }
 
-    auto vsBlob = CompileShader(L"Resources/shaders/PostProcess.VS.hlsl", L"vs_6_0", dxcUtils.Get(), dxcCompiler.Get(), includeHandler.Get(), std::cout);
-    auto psBlob = CompileShader(L"Resources/shaders/PostProcess.PS.hlsl", L"ps_6_0", dxcUtils.Get(), dxcCompiler.Get(), includeHandler.Get(), std::cout);
-    assert(vsBlob && psBlob);
-
-    // --- 3. PSO の作成 ---
-    D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc{};
-    psoDesc.pRootSignature = compositeRootSignature.Get();
-    psoDesc.VS = { vsBlob->GetBufferPointer(), vsBlob->GetBufferSize() };
-    psoDesc.PS = { psBlob->GetBufferPointer(), psBlob->GetBufferSize() };
-
-    D3D12_INPUT_ELEMENT_DESC inputElements[] = {
-        { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-        { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+    // 3. 合成: 画面（黒帯の内側）に、ブルームを足し・色を整え・ヴィネットを掛けて写す
+    dxCommon->BindMainRenderTarget();
+    const PostEffectSettings& s = settings;
+    // PostProcess.PS.hlsl の CompositeParams と同じ並び（float3 は 16 バイトの境目をまたがないように置く）
+    const float constants[kRootConstantCount] = {
+        useBloom ? s.bloomIntensity : 0.0f, s.brightness, s.contrast, s.saturation,
+        s.sepia, s.vignetteIntensity, s.vignetteRadius, usePointFilter ? 1.0f : 0.0f,
+        s.tint.x, s.tint.y, s.tint.z, 0.0f,
+        s.vignetteColor.x, s.vignetteColor.y, s.vignetteColor.z, static_cast<float>(width) / static_cast<float>(height),
     };
-    psoDesc.InputLayout = { inputElements, _countof(inputElements) };
-
-    psoDesc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
-    psoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
-    psoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-    psoDesc.DepthStencilState.DepthEnable = FALSE; // 深度テストなし
-    psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
-
-    psoDesc.NumRenderTargets = 1;
-    psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-    psoDesc.SampleMask = D3D12_DEFAULT_SAMPLE_MASK;
-    psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-    psoDesc.SampleDesc.Count = 1;
-
-    hr = device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&compositePipelineState));
-    Logger::CheckHResult(hr, "PostProcess: CreateGraphicsPipelineState(composite)");
+    commandList->SetPipelineState(compositePipeline.Get());
+    commandList->SetGraphicsRootDescriptorTable(0, srvManager->GetGPUDescriptorHandle(sceneSrvIndex));
+    commandList->SetGraphicsRootDescriptorTable(1, srvManager->GetGPUDescriptorHandle(targets[kBloomPong].srvIndex));
+    commandList->SetGraphicsRoot32BitConstants(2, kRootConstantCount, constants, 0);
+    commandList->DrawInstanced(3, 1, 0, 0);
 }
 
-void PostProcess::CreateExtractPipeline() {
-    auto device = dxCommon->GetDevice();
-
-    // --- 1. RootSignature の作成 ---
-    D3D12_DESCRIPTOR_RANGE descriptorRange[1] = {};
-    descriptorRange[0].BaseShaderRegister = 0; // t0
-    descriptorRange[0].NumDescriptors = 1;
-    descriptorRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-    descriptorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-
-    D3D12_ROOT_PARAMETER rootParameters[2] = {};
-    rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[0].DescriptorTable.pDescriptorRanges = descriptorRange;
-    rootParameters[0].DescriptorTable.NumDescriptorRanges = 1;
-
-    rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-    rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[1].Constants.ShaderRegister = 0; // b0: bloomThreshold
-    rootParameters[1].Constants.Num32BitValues = 1;
-
-    D3D12_STATIC_SAMPLER_DESC staticSamplers[1] = {};
-    staticSamplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
-    staticSamplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-    staticSamplers[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-    staticSamplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-    staticSamplers[0].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
-    staticSamplers[0].MaxLOD = D3D12_FLOAT32_MAX;
-    staticSamplers[0].ShaderRegister = 0; // s0
-    staticSamplers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-
-    D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc{};
-    rootSignatureDesc.pParameters = rootParameters;
-    rootSignatureDesc.NumParameters = _countof(rootParameters);
-    rootSignatureDesc.pStaticSamplers = staticSamplers;
-    rootSignatureDesc.NumStaticSamplers = _countof(staticSamplers);
-    rootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-
-    Microsoft::WRL::ComPtr<ID3DBlob> signatureBlob;
-    Microsoft::WRL::ComPtr<ID3DBlob> errorBlob;
-    HRESULT hr = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signatureBlob, &errorBlob);
-    if (FAILED(hr) && errorBlob) {
-        Logger::Log(reinterpret_cast<char*>(errorBlob->GetBufferPointer()));
-    }
-    Logger::CheckHResult(hr, "PostProcess: D3D12SerializeRootSignature(extract)");
-    hr = device->CreateRootSignature(0, signatureBlob->GetBufferPointer(), signatureBlob->GetBufferSize(), IID_PPV_ARGS(&extractRootSignature));
-    Logger::CheckHResult(hr, "PostProcess: CreateRootSignature(extract)");
-
-    // --- 2. シェーダーのコンパイル ---
-    Microsoft::WRL::ComPtr<IDxcUtils> dxcUtils;
-    Microsoft::WRL::ComPtr<IDxcCompiler3> dxcCompiler;
-    Microsoft::WRL::ComPtr<IDxcIncludeHandler> includeHandler;
-    hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxcUtils));
-    Logger::CheckHResult(hr, "PostProcess: DxcCreateInstance(DxcUtils)");
-    hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxcCompiler));
-    Logger::CheckHResult(hr, "PostProcess: DxcCreateInstance(DxcCompiler)");
-    hr = dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
-    Logger::CheckHResult(hr, "PostProcess: CreateDefaultIncludeHandler");
-
-    auto vsBlob = CompileShader(L"Resources/shaders/PostProcess.VS.hlsl", L"vs_6_0", dxcUtils.Get(), dxcCompiler.Get(), includeHandler.Get(), std::cout);
-    auto psBlob = CompileShader(L"Resources/shaders/BrightnessExtract.PS.hlsl", L"ps_6_0", dxcUtils.Get(), dxcCompiler.Get(), includeHandler.Get(), std::cout);
-    assert(vsBlob && psBlob);
-
-    // --- 3. PSO の作成 ---
-    D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc{};
-    psoDesc.pRootSignature = extractRootSignature.Get();
-    psoDesc.VS = { vsBlob->GetBufferPointer(), vsBlob->GetBufferSize() };
-    psoDesc.PS = { psBlob->GetBufferPointer(), psBlob->GetBufferSize() };
-
-    D3D12_INPUT_ELEMENT_DESC inputElements[] = {
-        { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-        { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-    };
-    psoDesc.InputLayout = { inputElements, _countof(inputElements) };
-
-    psoDesc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
-    psoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
-    psoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-    psoDesc.DepthStencilState.DepthEnable = FALSE;
-    psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
-
-    psoDesc.NumRenderTargets = 1;
-    psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-    psoDesc.SampleMask = D3D12_DEFAULT_SAMPLE_MASK;
-    psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-    psoDesc.SampleDesc.Count = 1;
-
-    hr = device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&extractPipelineState));
-    Logger::CheckHResult(hr, "PostProcess: CreateGraphicsPipelineState(extract)");
-}
-
-void PostProcess::CreateBlurPipeline() {
-    auto device = dxCommon->GetDevice();
-
-    // --- 1. RootSignature の作成 ---
-    D3D12_DESCRIPTOR_RANGE descriptorRange[1] = {};
-    descriptorRange[0].BaseShaderRegister = 0; // t0
-    descriptorRange[0].NumDescriptors = 1;
-    descriptorRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-    descriptorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-
-    D3D12_ROOT_PARAMETER rootParameters[2] = {};
-    rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[0].DescriptorTable.pDescriptorRanges = descriptorRange;
-    rootParameters[0].DescriptorTable.NumDescriptorRanges = 1;
-
-    rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-    rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParameters[1].Constants.ShaderRegister = 0; // b0: texelSize.xy, direction, blurStrength
-    rootParameters[1].Constants.Num32BitValues = 4;
-
-    D3D12_STATIC_SAMPLER_DESC staticSamplers[1] = {};
-    staticSamplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
-    staticSamplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-    staticSamplers[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-    staticSamplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-    staticSamplers[0].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
-    staticSamplers[0].MaxLOD = D3D12_FLOAT32_MAX;
-    staticSamplers[0].ShaderRegister = 0; // s0
-    staticSamplers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-
-    D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc{};
-    rootSignatureDesc.pParameters = rootParameters;
-    rootSignatureDesc.NumParameters = _countof(rootParameters);
-    rootSignatureDesc.pStaticSamplers = staticSamplers;
-    rootSignatureDesc.NumStaticSamplers = _countof(staticSamplers);
-    rootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-
-    Microsoft::WRL::ComPtr<ID3DBlob> signatureBlob;
-    Microsoft::WRL::ComPtr<ID3DBlob> errorBlob;
-    HRESULT hr = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signatureBlob, &errorBlob);
-    if (FAILED(hr) && errorBlob) {
-        Logger::Log(reinterpret_cast<char*>(errorBlob->GetBufferPointer()));
-    }
-    Logger::CheckHResult(hr, "PostProcess: D3D12SerializeRootSignature(blur)");
-    hr = device->CreateRootSignature(0, signatureBlob->GetBufferPointer(), signatureBlob->GetBufferSize(), IID_PPV_ARGS(&blurRootSignature));
-    Logger::CheckHResult(hr, "PostProcess: CreateRootSignature(blur)");
-
-    // --- 2. シェーダーのコンパイル ---
-    Microsoft::WRL::ComPtr<IDxcUtils> dxcUtils;
-    Microsoft::WRL::ComPtr<IDxcCompiler3> dxcCompiler;
-    Microsoft::WRL::ComPtr<IDxcIncludeHandler> includeHandler;
-    hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxcUtils));
-    Logger::CheckHResult(hr, "PostProcess: DxcCreateInstance(DxcUtils)");
-    hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxcCompiler));
-    Logger::CheckHResult(hr, "PostProcess: DxcCreateInstance(DxcCompiler)");
-    hr = dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
-    Logger::CheckHResult(hr, "PostProcess: CreateDefaultIncludeHandler");
-
-    auto vsBlob = CompileShader(L"Resources/shaders/PostProcess.VS.hlsl", L"vs_6_0", dxcUtils.Get(), dxcCompiler.Get(), includeHandler.Get(), std::cout);
-    auto psBlob = CompileShader(L"Resources/shaders/GaussianBlur.PS.hlsl", L"ps_6_0", dxcUtils.Get(), dxcCompiler.Get(), includeHandler.Get(), std::cout);
-    assert(vsBlob && psBlob);
-
-    // --- 3. PSO の作成 ---
-    D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc{};
-    psoDesc.pRootSignature = blurRootSignature.Get();
-    psoDesc.VS = { vsBlob->GetBufferPointer(), vsBlob->GetBufferSize() };
-    psoDesc.PS = { psBlob->GetBufferPointer(), psBlob->GetBufferSize() };
-
-    D3D12_INPUT_ELEMENT_DESC inputElements[] = {
-        { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-        { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-    };
-    psoDesc.InputLayout = { inputElements, _countof(inputElements) };
-
-    psoDesc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
-    psoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
-    psoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-    psoDesc.DepthStencilState.DepthEnable = FALSE;
-    psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
-
-    psoDesc.NumRenderTargets = 1;
-    psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-    psoDesc.SampleMask = D3D12_DEFAULT_SAMPLE_MASK;
-    psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-    psoDesc.SampleDesc.Count = 1;
-
-    hr = device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&blurPipelineState));
-    Logger::CheckHResult(hr, "PostProcess: CreateGraphicsPipelineState(gaussianBlur)");
-
-    // ボックスフィルターPSO：ルートシグネチャ・頂点シェーダー・各種ステートはガウシアンと共用し、
-    // ピクセルシェーダーだけBoxBlur.PS.hlslに差し替える
-    auto boxPsBlob = CompileShader(L"Resources/shaders/BoxBlur.PS.hlsl", L"ps_6_0", dxcUtils.Get(), dxcCompiler.Get(), includeHandler.Get(), std::cout);
-    assert(boxPsBlob);
-    psoDesc.PS = { boxPsBlob->GetBufferPointer(), boxPsBlob->GetBufferSize() };
-    hr = device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&boxBlurPipelineState));
-    Logger::CheckHResult(hr, "PostProcess: CreateGraphicsPipelineState(boxBlur)");
-}
-
-void PostProcess::PreDraw() {
-    auto commandList = dxCommon->GetCommandList();
-    D3D12_RESOURCE_BARRIER barrier{};
-    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barrier.Transition.pResource = resource.Get();
-    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-    commandList->ResourceBarrier(1, &barrier);
-
-    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = dxCommon->GetRtvHandle(rtvIndex);
-    D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dxCommon->GetDsvHandle();
-    commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
-
-    // DirectXCommon::PreDrawと同じく、黒帯部分は黒、ゲームの絵の範囲だけ背景色にする
-    commandList->ClearRenderTargetView(rtvHandle, DirectXCommon::kLetterboxColor, 0, nullptr);
-    commandList->ClearRenderTargetView(rtvHandle, DirectXCommon::kClearColor, 1, &dxCommon->GetScissorRect());
-    commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
-}
-
-void PostProcess::PostDraw() {
-    auto commandList = dxCommon->GetCommandList();
-    D3D12_RESOURCE_BARRIER barrier{};
-    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barrier.Transition.pResource = resource.Get();
-    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-    commandList->ResourceBarrier(1, &barrier);
-
-    UINT backBufferIndex = dxCommon->GetSwapChain()->GetCurrentBackBufferIndex();
-    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = dxCommon->GetRtvHandle(backBufferIndex);
-    D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dxCommon->GetDsvHandle();
-    commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
-}
-
-void PostProcess::Update(bool showDebugUI) {
-    // グレースケール・フラッシュ／被弾ヴィネットのタイマーはデバッグUI表示状態に関係なく常に進める
-    if (grayscaleFlashTimer > 0.0f) {
-        grayscaleFlashTimer -= 1.0f / 60.0f;
-        if (grayscaleFlashTimer < 0.0f) grayscaleFlashTimer = 0.0f;
-    }
-    if (damageVignetteTimer > 0.0f) {
-        damageVignetteTimer -= 1.0f / 60.0f;
-        if (damageVignetteTimer < 0.0f) damageVignetteTimer = 0.0f;
-    }
-
-    if (!showDebugUI) return;
-
+void PostProcess::DrawDebugUI() {
 #ifdef _DEBUG
-    // Release/DevelopmentではImGuiコンテキスト自体を生成しない（Framework::Initialize参照）ため、
-    // ここに到達するとBegin()がコンテキスト無しで呼ばれてしまう。Debugビルドのみに限定する
-    ImGui::Begin("PostProcess");
-    ImGui::DragFloat("Bloom Threshold", &bloomThreshold, 0.01f, 0.0f, 5.0f);
-    ImGui::DragFloat("Bloom Intensity", &bloomIntensity, 0.01f, 0.0f, 10.0f);
-    ImGui::DragFloat("Bloom Blur Strength", &blurStrength, 0.01f, 0.0f, 10.0f);
-
+    PostEffectSettings& s = settings;
+    ImGui::Begin("PostProcess [F6]");
+    // ImGui の文字は英数字のみ（日本語のフォントを読んでいない）
+    ImGui::Text(s.IsActive() ? "Active" : "Inactive (no effect)");
+    ImGui::Checkbox("Bloom", &s.bloomEnabled);
+    ImGui::SliderFloat("Bloom Threshold", &s.bloomThreshold, 0.0f, 1.0f);
+    ImGui::SliderFloat("Bloom Intensity", &s.bloomIntensity, 0.0f, 3.0f);
+    ImGui::SliderFloat("Bloom Radius", &s.bloomRadius, 0.0f, 5.0f);
     ImGui::Separator();
-    ImGui::Checkbox("Screen Blur Enabled (Gaussian)", &blurEnabled);
-    ImGui::DragFloat("Screen Blur Strength (Gaussian)", &screenBlurStrength, 0.01f, 0.0f, 10.0f);
-    ImGui::Checkbox("Screen Blur Enabled (Box)", &boxBlurEnabled);
-    ImGui::DragFloat("Screen Blur Strength (Box)", &boxBlurStrength, 0.01f, 0.0f, 10.0f);
-
+    ImGui::SliderFloat("Blur", &s.blur, 0.0f, 5.0f);
     ImGui::Separator();
-    ImGui::Checkbox("Vignette Enabled", &vignetteEnabled);
-    ImGui::DragFloat("Vignette Intensity", &vignetteIntensity, 0.01f, 0.0f, 1.0f);
-    ImGui::DragFloat("Vignette Radius", &vignetteRadius, 0.01f, 0.0f, 1.0f);
-
+    ImGui::SliderFloat("Brightness", &s.brightness, -1.0f, 1.0f);
+    ImGui::SliderFloat("Contrast", &s.contrast, 0.0f, 2.0f);
+    ImGui::SliderFloat("Saturation", &s.saturation, 0.0f, 2.0f);
+    ImGui::SliderFloat("Sepia", &s.sepia, 0.0f, 1.0f);
+    ImGui::ColorEdit3("Tint", &s.tint.x);
+    ImGui::Separator();
+    ImGui::SliderFloat("Vignette Intensity", &s.vignetteIntensity, 0.0f, 1.0f);
+    ImGui::SliderFloat("Vignette Radius", &s.vignetteRadius, 0.0f, 1.0f);
+    ImGui::ColorEdit3("Vignette Color", &s.vignetteColor.x);
+    if (ImGui::Button("Reset (default)")) {
+        ResetToDefault();
+    }
     ImGui::End();
 #endif
-}
-
-void PostProcess::DrawBrightnessExtractPass() {
-    auto commandList = dxCommon->GetCommandList();
-
-    D3D12_RESOURCE_BARRIER barrier{};
-    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barrier.Transition.pResource = brightnessResource.Get();
-    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-    commandList->ResourceBarrier(1, &barrier);
-
-    commandList->RSSetViewports(1, &bloomViewport);
-    commandList->RSSetScissorRects(1, &bloomScissorRect);
-
-    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = dxCommon->GetRtvHandle(kBrightnessRtvIndex);
-    commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
-
-    commandList->SetGraphicsRootSignature(extractRootSignature.Get());
-    commandList->SetPipelineState(extractPipelineState.Get());
-    commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
-    commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
-
-    commandList->SetGraphicsRootDescriptorTable(0, srvManager->GetGPUDescriptorHandle(srvIndex));
-    commandList->SetGraphicsRoot32BitConstants(1, 1, &bloomThreshold, 0);
-
-    commandList->DrawInstanced(4, 1, 0, 0);
-
-    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-    commandList->ResourceBarrier(1, &barrier);
-}
-
-void PostProcess::DrawGaussianBlurPass(bool horizontal, ID3D12Resource* srcResource, uint32_t srcSrvIndex, ID3D12Resource* dstResource, uint32_t dstRtvIndex,
-    D3D12_VIEWPORT viewport, D3D12_RECT scissorRect, float texelWidth, float texelHeight, float strength, bool useBoxFilter) {
-    auto commandList = dxCommon->GetCommandList();
-
-    D3D12_RESOURCE_BARRIER barrier{};
-    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barrier.Transition.pResource = dstResource;
-    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-    commandList->ResourceBarrier(1, &barrier);
-
-    commandList->RSSetViewports(1, &viewport);
-    commandList->RSSetScissorRects(1, &scissorRect);
-
-    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = dxCommon->GetRtvHandle(dstRtvIndex);
-    commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
-
-    commandList->SetGraphicsRootSignature(blurRootSignature.Get());
-    commandList->SetPipelineState(useBoxFilter ? boxBlurPipelineState.Get() : blurPipelineState.Get());
-    commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
-    commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
-
-    commandList->SetGraphicsRootDescriptorTable(0, srvManager->GetGPUDescriptorHandle(srcSrvIndex));
-
-    // b0: texelSize.xy, direction(0=水平/1=垂直), blurStrength
-    float blurParam[4] = {
-        texelWidth,
-        texelHeight,
-        horizontal ? 0.0f : 1.0f,
-        strength
-    };
-    commandList->SetGraphicsRoot32BitConstants(1, 4, blurParam, 0);
-
-    commandList->DrawInstanced(4, 1, 0, 0);
-
-    (void)srcResource; // バリア対象はdst側のみのため未使用（引数は仕様上受け取る）
-
-    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-    commandList->ResourceBarrier(1, &barrier);
-}
-
-void PostProcess::DrawFullScreenBlurPass() {
-    // ガウシアン・ボックスそれぞれ独立にON/OFFできる。両方ONの場合はボックスを優先する
-    if (!blurEnabled && !boxBlurEnabled) return;
-    bool useBox = boxBlurEnabled;
-    float strength = useBox ? boxBlurStrength : screenBlurStrength;
-
-    // オフスクリーン同士のコピーなのでテクスチャ全体を1:1で処理する
-    // （dxCommonのビューポートはレターボックス時にバックバッファの一部だけになるため使わない）
-    D3D12_VIEWPORT viewport{ 0.0f, 0.0f, static_cast<float>(fullWidth), static_cast<float>(fullHeight), 0.0f, 1.0f };
-    D3D12_RECT scissorRect{ 0, 0, static_cast<LONG>(fullWidth), static_cast<LONG>(fullHeight) };
-    float texelWidth = 1.0f / static_cast<float>(fullWidth);
-    float texelHeight = 1.0f / static_cast<float>(fullHeight);
-
-    // シーンテクスチャ(resource) -> 水平ブラー(fullBlurHResource) -> 垂直ブラー(fullBlurVResource=最終結果)
-    DrawGaussianBlurPass(true, resource.Get(), srvIndex, fullBlurHResource.Get(), kFullBlurHRtvIndex,
-        viewport, scissorRect, texelWidth, texelHeight, strength, useBox);
-    DrawGaussianBlurPass(false, fullBlurHResource.Get(), fullBlurHSrvIndex, fullBlurVResource.Get(), kFullBlurVRtvIndex,
-        viewport, scissorRect, texelWidth, texelHeight, strength, useBox);
-}
-
-void PostProcess::DrawCompositePass() {
-    auto commandList = dxCommon->GetCommandList();
-
-    // 半解像度パスの後なのでフル解像度に戻す（忘れるとレティクル等のUIまで半解像度で歪む）。
-    // シーンテクスチャはバックバッファと同サイズで、黒帯込みの絵が入っているのでバックバッファ全体に1:1で合成する
-    D3D12_VIEWPORT viewport{ 0.0f, 0.0f, static_cast<float>(fullWidth), static_cast<float>(fullHeight), 0.0f, 1.0f };
-    D3D12_RECT scissorRect{ 0, 0, static_cast<LONG>(fullWidth), static_cast<LONG>(fullHeight) };
-    commandList->RSSetViewports(1, &viewport);
-    commandList->RSSetScissorRects(1, &scissorRect);
-
-    UINT backBufferIndex = dxCommon->GetSwapChain()->GetCurrentBackBufferIndex();
-    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = dxCommon->GetRtvHandle(backBufferIndex);
-    D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dxCommon->GetDsvHandle();
-    commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
-
-    commandList->SetGraphicsRootSignature(compositeRootSignature.Get());
-    commandList->SetPipelineState(compositePipelineState.Get());
-    commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
-    commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
-
-    // resource(シーン)・blurVResource(ブルーム)・fullBlurVResource(全体ぼかし)はどれも既にPSR状態のためバリア不要
-    commandList->SetGraphicsRootDescriptorTable(0, srvManager->GetGPUDescriptorHandle(srvIndex));
-    commandList->SetGraphicsRootDescriptorTable(1, srvManager->GetGPUDescriptorHandle(blurVSrvIndex));
-    commandList->SetGraphicsRootDescriptorTable(2, srvManager->GetGPUDescriptorHandle(fullBlurVSrvIndex));
-
-    // グレースケール・フラッシュは三角波（前半0→1でフェードイン、後半1→0でフェードアウト）で強さを求め、
-    // 手動トグル(grayscaleEnabled)とは独立させつつ、どちらか強い方を採用する
-    float grayscaleFlashRatio = 0.0f;
-    if (grayscaleFlashTimer > 0.0f) {
-        float t = 1.0f - (grayscaleFlashTimer / kFlashDuration); // 0(開始)→1(終了)
-        grayscaleFlashRatio = (t < 0.5f) ? (t * 2.0f) : ((1.0f - t) * 2.0f);
-    }
-    float grayscaleBase = grayscaleEnabled ? 1.0f : 0.0f;
-    float grayscaleBlend = (grayscaleFlashRatio > grayscaleBase) ? grayscaleFlashRatio : grayscaleBase;
-
-    // 被弾ヴィネットはグレースケール・フラッシュ（三角波）とは異なり、被弾直後に最大→時間経過で薄くなる単純な減衰
-    float damageVignetteRatio = damageVignetteTimer / kImpactVignetteDuration; // 1(開始)→0(終了)
-    float damageVignetteIntensity = damageVignetteRatio * kImpactVignetteMaxBlend;
-
-    float compositeParam[7] = {
-        bloomIntensity, grayscaleBlend, sepiaEnabled ? 1.0f : 0.0f, (blurEnabled || boxBlurEnabled) ? 1.0f : 0.0f,
-        vignetteEnabled ? vignetteIntensity : 0.0f, vignetteRadius, damageVignetteIntensity
-    };
-    commandList->SetGraphicsRoot32BitConstants(3, 7, compositeParam, 0);
-
-    commandList->DrawInstanced(4, 1, 0, 0);
-}
-
-void PostProcess::Draw() {
-    DrawBrightnessExtractPass();
-    DrawGaussianBlurPass(true, brightnessResource.Get(), brightnessSrvIndex, blurHResource.Get(), kBlurHRtvIndex,
-        bloomViewport, bloomScissorRect, 1.0f / static_cast<float>(bloomWidth), 1.0f / static_cast<float>(bloomHeight), blurStrength);
-    DrawGaussianBlurPass(false, blurHResource.Get(), blurHSrvIndex, blurVResource.Get(), kBlurVRtvIndex,
-        bloomViewport, bloomScissorRect, 1.0f / static_cast<float>(bloomWidth), 1.0f / static_cast<float>(bloomHeight), blurStrength);
-    DrawFullScreenBlurPass();
-    DrawCompositePass();
 }

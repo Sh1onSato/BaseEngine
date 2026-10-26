@@ -1,5 +1,6 @@
 #pragma once
 #include "DirectXCommon.h"
+#include "PostProcess.h"
 #include "SrvManager.h"
 #include <cstdint>
 #include <wrl.h>
@@ -32,6 +33,8 @@ public:
     static constexpr float kMaxScale = 1.0f;
 
     void Initialize(DirectXCommon* dxCommon, SrvManager* srvManager);
+    // 画面の効果（所有しない）。効果があるフレームは倍率 1 でも別の描画先に描き、EndScene で PostProcess::Render を通して写す
+    void SetPostProcess(PostProcess* newPostProcess) { postProcess = newPostProcess; }
 
     // 3D を描く解像度の倍率（0.25〜1.0。1.0 なら今までどおり画面に直接描く）
     void SetScale(float scale);
@@ -64,8 +67,9 @@ private:
     float scale = 1.0f;
     Filter filter = Filter::kLinear;
 
-    // 今のフレームで小さい描画先に描いているか
-    bool isSceneScaled = false;
+    PostProcess* postProcess = nullptr;
+    // 今のフレームで画面とは別の描画先に描いているか（倍率 1 未満か、画面の効果があるとき）
+    bool isOffscreen = false;
     uint32_t renderWidth = 0;
     uint32_t renderHeight = 0;
 

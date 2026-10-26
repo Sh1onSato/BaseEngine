@@ -1,5 +1,5 @@
 // 画面全体を覆う大きな三角形1枚（頂点バッファを使わず、頂点番号から位置を作る）。
-// RenderScaler が、小さい解像度で描いた 3D の絵を画面に引き伸ばすときに使う
+// RenderScaler が小さい解像度で描いた 3D の絵を画面に引き伸ばすときと、PostProcess の各段で使う
 struct VertexShaderOutput {
     float4 position : SV_POSITION;
     float2 texcoord : TEXCOORD0;

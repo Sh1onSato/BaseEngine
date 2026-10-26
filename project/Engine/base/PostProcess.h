@@ -2,167 +2,127 @@
 #include "DirectXCommon.h"
 #include "SrvManager.h"
 #include "Structs.h"
+#include <cstdint>
 #include <wrl.h>
-#include <memory>
 
 /// <summary>
-/// ポストエフェクト（オフスクリーンレンダリング）管理クラス
+/// 画面の効果（ポストエフェクト）の設定。値を変えるだけで効く（全部の値が既定のままなら何もしない）。
+/// </summary>
+struct PostEffectSettings {
+    // ブルーム: 明るい所の光がにじんで広がる
+    bool bloomEnabled = false;
+    float bloomThreshold = 0.8f; // これより明るい所（0〜1、明るさ）だけが光る。下げるほど広い範囲が光る
+    float bloomIntensity = 1.0f; // 光を足す強さ
+    float bloomRadius = 1.5f;    // にじむ広さ（大きいほど広くぼける。内部解像度を変えても画面上の広さは同じ）
+
+    // 画面全体のぼかし（0 で無し。ポーズ画面の背景など。2〜3 で強め。内部解像度を変えても画面上のぼけ方は同じ）
+    float blur = 0.0f;
+
+    // 色の調整
+    float brightness = 0.0f;  // 明るさ（-1〜1。0 でそのまま）
+    float contrast = 1.0f;    // コントラスト（1 でそのまま、0 で灰色一色）
+    float saturation = 1.0f;  // 彩度（1 でそのまま、0 で白黒、2 で鮮やか）
+    float sepia = 0.0f;       // セピア（0〜1）
+    Vector3 tint = { 1.0f, 1.0f, 1.0f }; // 掛ける色（夕方なら { 1.0f, 0.85f, 0.7f } など）
+
+    // ヴィネット: 画面の端を暗く（または vignetteColor に）する。被弾の赤い縁なら色を赤にして強さを動かす
+    float vignetteIntensity = 0.0f; // 0 で無し、1 で端が vignetteColor 一色
+    float vignetteRadius = 0.5f;    // ここより中心側は変えない（0 で中心から、1 で角だけ）
+    Vector3 vignetteColor = { 0.0f, 0.0f, 0.0f };
+
+    // どれか1つでも効果があるか（無ければ PostProcess は何もしない）
+    bool IsActive() const;
+};
+
+/// <summary>
+/// 画面の効果（ブルーム・ぼかし・色の調整・ヴィネット）。3D の絵にだけ掛かり、UI・文字には掛からない。
+/// Framework が持っていて、Framework::GetInstance()->GetPostProcess() で使う。
+///
+/// 使い方:
+///   PostEffectSettings& effect = Framework::GetInstance()->GetPostProcess()->GetSettings();
+///   effect.bloomEnabled = true;           // このシーンだけブルーム
+///   effect.saturation = 0.0f;             // 白黒にする
+/// シーンを切り替えると、既定の設定（SetDefaultSettings。最初は全部効果なし）に戻る。
+/// ゲーム全体でいつも掛けたい効果は MyGame::Initialize で SetDefaultSettings する。
+/// Debug ビルドでは [F6] で調整用の ImGui の窓を出せる。
+///
+/// しくみ: 効果があるフレームは、RenderScaler が 3D を画面ではなく別の描画先に描き、
+/// RenderScaler::EndScene の中で Render を呼んで、効果を掛けながら画面（黒帯の内側）に写す。
+/// 内部解像度を下げているときは、小さい解像度のまま効果を掛けてから引き伸ばす（その分軽い）。
 /// </summary>
 class PostProcess {
 public:
     void Initialize(DirectXCommon* dxCommon, SrvManager* srvManager);
 
-    // 描画開始（これ以降の描画はテクスチャに行われる）
-    void PreDraw();
-    // 描画終了（これ以降の描画は画面に行われる）
-    void PostDraw();
+    // 今の設定（シーンから書き換える）
+    PostEffectSettings& GetSettings() { return settings; }
+    const PostEffectSettings& GetSettings() const { return settings; }
+    // シーンを切り替えたときに戻る設定。今の設定も同じにする
+    void SetDefaultSettings(const PostEffectSettings& newDefault);
+    const PostEffectSettings& GetDefaultSettings() const { return defaultSettings; }
+    // 今の設定を既定に戻す（SceneManager がシーンの切り替えで呼ぶ）
+    void ResetToDefault() { settings = defaultSettings; }
 
-    // 更新（showDebugUI: trueの間だけImGui調整パネルを表示する。Pキーでのポーズ状態と連動させる想定）
-    void Update(bool showDebugUI);
+    // このフレームに効果を掛けるか（RenderScaler が別の描画先に描くかを決めるのに使う）
+    bool IsActive() const { return settings.IsActive(); }
 
-    // 結果を画面に表示する
-    void Draw();
+    /// <summary>
+    /// source（width x height の 3D の絵。PIXEL_SHADER_RESOURCE 状態）に効果を掛けて、
+    /// 今のメインの描画先（バックバッファの黒帯の内側）に写す。RenderScaler::EndScene が呼ぶ。
+    /// usePointFilter: 引き伸ばすときにくっきり（ドット絵向け）にするか
+    /// </summary>
+    void Render(uint32_t sourceSrvIndex, uint32_t width, uint32_t height, bool usePointFilter);
 
-    // グレースケール表示のON/OFFを切り替える（キー入力等から呼び出す想定）
-    void ToggleGrayscale() { grayscaleEnabled = !grayscaleEnabled; }
-    // セピア表示のON/OFFを切り替える（キー入力等から呼び出す想定。グレースケールと同時ONの場合はセピアを優先）
-    void ToggleSepia() { sepiaEnabled = !sepiaEnabled; }
-    // 画面全体ぼかしのON/OFFを切り替える（キー入力等から呼び出す想定。ブルームとは独立して重ねがけ可能）
-    void ToggleBlur() { blurEnabled = !blurEnabled; }
-    // ワープ通過時などに一瞬だけグレースケールを掛ける演出を開始する（手動トグルのgrayscaleEnabledとは独立）
-    void TriggerFlash() { grayscaleFlashTimer = kFlashDuration; }
-    // 画面周辺減光（ヴィネット）のON/OFFを切り替える（キー入力等から呼び出す想定）
-    void ToggleVignette() { vignetteEnabled = !vignetteEnabled; }
-    // 被弾時の一瞬赤ヴィネット演出を開始する（TakeDamage()から呼ぶ想定）
-    void TriggerImpactVignette() { damageVignetteTimer = kImpactVignetteDuration; }
-    // 画面全体ぼかし（ボックスフィルター版）のON/OFFを切り替える（ガウシアン版のToggleBlur()と対称）
-    void ToggleBoxBlur() { boxBlurEnabled = !boxBlurEnabled; }
-
-    // --- 設定メニュー（SettingsMenu）から値を読み書きするためのアクセサ ---
-    float GetBloomIntensity() const { return bloomIntensity; }
-    void SetBloomIntensity(float v) { bloomIntensity = v; }
-    bool IsBlurEnabled() const { return blurEnabled; }
-    float GetScreenBlurStrength() const { return screenBlurStrength; }
-    void SetScreenBlurStrength(float v) { screenBlurStrength = v; }
-    bool IsBoxBlurEnabled() const { return boxBlurEnabled; }
-    float GetBoxBlurStrength() const { return boxBlurStrength; }
-    void SetBoxBlurStrength(float v) { boxBlurStrength = v; }
-    bool IsGrayscaleEnabled() const { return grayscaleEnabled; }
-    bool IsSepiaEnabled() const { return sepiaEnabled; }
-    bool IsVignetteEnabled() const { return vignetteEnabled; }
-    float GetVignetteIntensity() const { return vignetteIntensity; }
-    void SetVignetteIntensity(float v) { vignetteIntensity = v; }
-    float GetVignetteRadius() const { return vignetteRadius; }
-    void SetVignetteRadius(float v) { vignetteRadius = v; }
+    // 調整用の ImGui の窓（Debug ビルドで Framework が [F6] のときに呼ぶ）
+    void DrawDebugUI();
 
 private:
-    // RTVインデックス（rtvDescriptorHeapの並び）
-    static constexpr uint32_t kSceneRtvIndex = 2;
-    static constexpr uint32_t kBrightnessRtvIndex = 3;
-    static constexpr uint32_t kBlurHRtvIndex = 4;
-    static constexpr uint32_t kBlurVRtvIndex = 5;
-    static constexpr uint32_t kFullBlurHRtvIndex = 6;
-    static constexpr uint32_t kFullBlurVRtvIndex = 7;
+    // 途中の絵1枚（描画先と、読むときの SRV）
+    struct Target {
+        Microsoft::WRL::ComPtr<ID3D12Resource> resource;
+        uint32_t rtvIndex = 0;
+        uint32_t srvIndex = 0;
+        uint32_t width = 0;
+        uint32_t height = 0;
+    };
+    enum TargetId {
+        kBright,     // 明るい所だけ（半分の解像度）
+        kBloomPing,  // ブルームのぼかしの途中（半分の解像度）
+        kBloomPong,  // ブルームのぼかしの結果（半分の解像度）
+        kBlurPing,   // 画面全体のぼかしの途中（等倍）
+        kBlurPong,   // 画面全体のぼかしの結果（等倍）
+        kTargetCount,
+    };
 
-    // オフスクリーンのフル解像度（Initialize時点のバックバッファサイズ）。
-    // ※ウィンドウのリサイズにはまだ追従しない（作り直しは未対応）
-    uint32_t fullWidth = 0;
-    uint32_t fullHeight = 0;
-    // ブルーム処理は負荷軽減のため半解像度で行う（Initializeでフル解像度の半分に決める）
-    uint32_t bloomWidth = 0;
-    uint32_t bloomHeight = 0;
+    void CreateRootSignature();
+    Microsoft::WRL::ComPtr<ID3D12PipelineState> CreatePipeline(const wchar_t* pixelShaderPath);
+    // 途中の絵を width x height（ブルームは半分）で作り直す（同じ大きさなら何もしない）
+    void EnsureTargets(uint32_t width, uint32_t height);
+    void CreateTarget(Target& target, uint32_t width, uint32_t height);
 
-    void CreateGraphicsPipeline();
-    void CreateExtractPipeline();
-    void CreateBlurPipeline();
-
-    // 指定した幅・高さのテクスチャ1枚を作成するヘルパー（輝度抽出/ブラーHV/全画面ぼかし共通の手順を集約）
-    Microsoft::WRL::ComPtr<ID3D12Resource> CreateBloomTexture(uint32_t width, uint32_t height, uint32_t rtvIndex, uint32_t& outSrvIndex);
-
-    void DrawBrightnessExtractPass();
-    // useBoxFilter: trueならガウシアンの代わりにボックスフィルター（均等重み平均）のPSOを使う
-    void DrawGaussianBlurPass(bool horizontal, ID3D12Resource* srcResource, uint32_t srcSrvIndex, ID3D12Resource* dstResource, uint32_t dstRtvIndex,
-        D3D12_VIEWPORT viewport, D3D12_RECT scissorRect, float texelWidth, float texelHeight, float strength, bool useBoxFilter = false);
-    void DrawCompositePass();
-    // 画面全体ぼかしパス（blurEnabled時にシーンテクスチャを水平→垂直の2パスでぼかし、fullBlurVResourceに結果を出す）
-    void DrawFullScreenBlurPass();
+    // source を読んで target に全面を描く。constants はピクセルシェーダーの b0
+    void DrawPass(ID3D12PipelineState* pipeline, uint32_t sourceSrvIndex, Target& target, const float* constants, uint32_t constantCount);
+    // source を target 経由で横・縦にぼかし、結果を result に入れる
+    void Blur(uint32_t sourceSrvIndex, Target& ping, Target& result, float radius);
 
     DirectXCommon* dxCommon = nullptr;
     SrvManager* srvManager = nullptr;
 
-    // オフスクリーン描画用のリソース（フル解像度シーン）
-    Microsoft::WRL::ComPtr<ID3D12Resource> resource;
-    uint32_t rtvIndex = kSceneRtvIndex;
-    uint32_t srvIndex = 0;
+    PostEffectSettings settings;
+    PostEffectSettings defaultSettings;
 
-    // 輝度抽出結果（半解像度）
-    Microsoft::WRL::ComPtr<ID3D12Resource> brightnessResource;
-    uint32_t brightnessSrvIndex = 0;
+    Target targets[kTargetCount];
+    uint32_t sourceWidth = 0;
+    uint32_t sourceHeight = 0;
 
-    // 水平ブラー結果（半解像度）
-    Microsoft::WRL::ComPtr<ID3D12Resource> blurHResource;
-    uint32_t blurHSrvIndex = 0;
+    // ルートシグネチャ（全部の段で共通）: [0] t0 読む絵 [1] t1 2枚目の絵（合成のときのブルーム）[2] b0 定数。s0 なめらか / s1 くっきり
+    Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature;
+    Microsoft::WRL::ComPtr<ID3D12PipelineState> extractPipeline;
+    Microsoft::WRL::ComPtr<ID3D12PipelineState> blurPipeline;
+    Microsoft::WRL::ComPtr<ID3D12PipelineState> compositePipeline;
 
-    // 垂直ブラー結果（半解像度）＝最終ブルームテクスチャ
-    Microsoft::WRL::ComPtr<ID3D12Resource> blurVResource;
-    uint32_t blurVSrvIndex = 0;
-
-    // 画面全体ぼかし用・水平ブラー結果（フル解像度）
-    Microsoft::WRL::ComPtr<ID3D12Resource> fullBlurHResource;
-    uint32_t fullBlurHSrvIndex = 0;
-
-    // 画面全体ぼかし用・垂直ブラー結果（フル解像度）＝最終ぼかしテクスチャ
-    Microsoft::WRL::ComPtr<ID3D12Resource> fullBlurVResource;
-    uint32_t fullBlurVSrvIndex = 0;
-
-    // 輝度抽出パイプライン
-    Microsoft::WRL::ComPtr<ID3D12RootSignature> extractRootSignature;
-    Microsoft::WRL::ComPtr<ID3D12PipelineState> extractPipelineState;
-
-    // ガウシアンブラーパイプライン（水平/垂直共通）
-    Microsoft::WRL::ComPtr<ID3D12RootSignature> blurRootSignature;
-    Microsoft::WRL::ComPtr<ID3D12PipelineState> blurPipelineState;
-    // ボックスフィルターパイプライン（blurRootSignatureを共用。画面全体ぼかしでガウシアンと切り替え比較できる）
-    Microsoft::WRL::ComPtr<ID3D12PipelineState> boxBlurPipelineState;
-
-    // 合成パイプライン（シーン + ブルーム）
-    Microsoft::WRL::ComPtr<ID3D12RootSignature> compositeRootSignature;
-    Microsoft::WRL::ComPtr<ID3D12PipelineState> compositePipelineState;
-
-    // 半解像度パス用のビューポート・シザー矩形
-    D3D12_VIEWPORT bloomViewport{};
-    D3D12_RECT bloomScissorRect{};
-
-    // ImGuiで調整するブルームパラメータ
-    float bloomThreshold = 1.0f;
-    float bloomIntensity = 1.0f;
-    float blurStrength = 1.0f;
-    bool grayscaleEnabled = false; // 合成パスで画面全体をグレースケール化するかどうか
-    bool sepiaEnabled = false;     // 合成パスで画面全体をセピア調にするかどうか（グレースケールより優先）
-
-    // ワープ通過時の一瞬グレースケール演出（三角波：前半でフェードイン、後半でフェードアウト）
-    float grayscaleFlashTimer = 0.0f; // 残り時間(秒)。0になると演出は終わる
-    static constexpr float kFlashDuration = 0.25f;
-
-    // 画面全体ぼかし（ブルームとは独立管理。ガウシアン=Bキー、ボックスはImGuiでそれぞれ独立にON/OFF。
-    // 両方ONの場合はボックスを優先する。ボックスは全タップ均等重みでガウシアンより効きが強いため別々のstrengthを持つ）
-    bool blurEnabled = false;
-    float screenBlurStrength = 2.0f;
-    bool boxBlurEnabled = false;
-    float boxBlurStrength = 0.4f;
-
-    // 画面周辺減光（ヴィネット。Vキーでトグル。調整用に常設）
-    bool vignetteEnabled = false;
-    float vignetteIntensity = 0.8f; // 0=効果なし、1で端が真っ黒
-    float vignetteRadius = 0.5f;    // ここより中心側は減光しない範囲（0=中心から、1で端のみ）
-
-    // 被弾時の一瞬赤ヴィネット演出（三角波：前半でフェードイン、後半でフェードアウト。上のvignetteとは独立）
-    float damageVignetteTimer = 0.0f; // 残り時間(秒)。0になると演出は終わる
-    static constexpr float kImpactVignetteDuration = 0.4f;
-    static constexpr float kImpactVignetteMaxBlend = 0.4f; // 発生時でも画面が完全な赤一色にならないよう上限を設ける
-
-    // 頂点データ (画面全体を覆う板ポリ用)
-    Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource;
-    D3D12_VERTEX_BUFFER_VIEW vertexBufferView{};
-
+    // 途中の絵の RTV ヒープの番号（RTV: 0〜1 スワップチェーン、2〜6 PostProcess、8 RenderScaler）
+    static constexpr uint32_t kFirstRtvIndex = 2;
+    // b0 の定数の数（合成の段が一番多い。PostProcess.PS.hlsl の CompositeParams と同じ並び）
+    static constexpr uint32_t kRootConstantCount = 16;
 };

@@ -55,6 +55,7 @@ public:
 	SkyboxCommon* GetSkyboxCommon() const { return skyboxCommon.get(); }
 	SceneManager* GetSceneManager() const { return sceneManager.get(); }
 	RenderScaler* GetRenderScaler() const { return renderScaler.get(); }
+	PostProcess* GetPostProcess() const { return postProcess.get(); }
 
 protected:
 	std::unique_ptr<WinApp> winApp = nullptr;
@@ -62,6 +63,10 @@ protected:
 	std::unique_ptr<SrvManager> srvManager = nullptr;
 	// 内部解像度スケール（3D を小さい解像度で描いて引き伸ばす）
 	std::unique_ptr<RenderScaler> renderScaler = nullptr;
+	// 画面の効果（ブルーム・色の調整など。RenderScaler が使う）
+	std::unique_ptr<PostProcess> postProcess = nullptr;
+	// Debug の [F6] で PostProcess の調整用の窓を出しているか
+	bool isPostProcessUIVisible = false;
 	std::unique_ptr<Input> input = nullptr;
 	
 	// これらはゲーム側で使う可能性が高いので protected に配置

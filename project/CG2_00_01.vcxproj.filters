@@ -300,6 +300,9 @@
     <ClCompile Include="Engine\2d\TileMap.cpp">
       <Filter>ソース ファイル\engine\2d</Filter>
     </ClCompile>
+    <ClCompile Include="Engine\scene\PostProcessTestScene.cpp">
+      <Filter>ソース ファイル\engine\scene</Filter>
+    </ClCompile>
     <ClCompile Include="Engine\scene\TiledTestScene.cpp">
       <Filter>ソース ファイル\engine\scene</Filter>
     </ClCompile>
@@ -654,6 +657,9 @@
     </ClInclude>
     <ClInclude Include="Engine\2d\SpriteDrawable.h">
       <Filter>ヘッダー ファイル\engine\2d</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\scene\PostProcessTestScene.h">
+      <Filter>ヘッダー ファイル\engine\scene</Filter>
     </ClInclude>
     <ClInclude Include="Engine\scene\TiledTestScene.h">
       <Filter>ヘッダー ファイル\engine\scene</Filter>

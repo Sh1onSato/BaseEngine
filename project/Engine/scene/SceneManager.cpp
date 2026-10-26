@@ -37,6 +37,8 @@ void SceneManager::SwapScene() {
     // 旧シーンで積んだ確認用の線（秒数付きの物）を残さない。旧シーンのカメラを指したままにもしない
     DebugDraw::Clear();
     DebugDraw::SetCamera(nullptr);
+    // 旧シーンで変えた画面の効果を、既定（MyGame で決めた物）に戻す
+    Framework::GetInstance()->GetPostProcess()->ResetToDefault();
 
     if (currentScene) {
         // 次のシーンに自分（マネージャ）を教える

@@ -9,6 +9,7 @@
 #include "PhysicsTestScene.h"
 #include "UITestScene.h"
 #include "TiledTestScene.h"
+#include "PostProcessTestScene.h"
 #include "Logger.h"
 #include <format>
 
@@ -54,6 +55,10 @@ BaseScene* SceneFactory::CreateScene(const std::string& sceneName) {
     else if (sceneName == "TILED_TEST") {
         // Tiled のマップ（TiledLoader / TiledSpawner / TileMap）の検証用シーン
         newScene = new TiledTestScene();
+    }
+    else if (sceneName == "POSTPROCESS_TEST") {
+        // 画面の効果（PostProcess: ブルーム・ぼかし・色の調整・ヴィネット）の検証用シーン
+        newScene = new PostProcessTestScene();
     }
     else {
         // 該当なしの場合は無言でnullptrを返すと「シーンが何も更新・描画されない」という

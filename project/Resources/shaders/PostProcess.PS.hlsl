@@ -1,71 +1,56 @@
+// PostProcess の最後の段: 3D の絵にブルームを足し、色を整え、ヴィネットを掛けて画面（黒帯の内側）に写す
 struct VertexShaderOutput {
     float4 position : SV_POSITION;
     float2 texcoord : TEXCOORD0;
 };
 
-Texture2D<float4> gTexture : register(t0);
-Texture2D<float4> gBloomTexture : register(t1);
-Texture2D<float4> gBlurTexture : register(t2);
-SamplerState gSampler : register(s0);
+Texture2D<float4> gScene : register(t0); // 3D の絵（画面全体のぼかしを掛けたときはぼかした絵）
+Texture2D<float4> gBloom : register(t1); // ぼかした明るい所
+SamplerState gLinearSampler : register(s0);
+SamplerState gPointSampler : register(s1);
 
-// ブルームをどれだけ加算合成するかの強度／グレースケール化・セピア化・画面全体ぼかし・ヴィネットをするかどうか
-cbuffer CompositeParam : register(b0) {
+// PostProcess::Render の constants と同じ並び
+cbuffer CompositeParams : register(b0) {
     float gBloomIntensity;
-    float gGrayscale;         // 0=通常表示, 1=グレースケール表示
-    float gSepia;             // 0=通常表示, 1=セピア表示（gGrayscaleより優先）
-    float gBlurEnabled;       // 0=通常表示, 1=画面全体ぼかし表示（ブルームとは独立して重ねがけされる）
-    float gVignetteIntensity;       // 0=効果なし、1で画面端が真っ黒になるまで減光
-    float gVignetteRadius;          // ここより中心側は減光しない範囲（0=中心から、1で端のみ）
-    float gDamageVignetteIntensity; // 被弾フラッシュ用。0=効果なし、上のvignetteとは独立に赤くブレンドする
+    float gBrightness;
+    float gContrast;
+    float gSaturation;
+    float gSepia;
+    float gVignetteIntensity;
+    float gVignetteRadius;
+    float gUsePointFilter; // 1 なら引き伸ばしをくっきり（RenderScaler の kPoint）
+    float3 gTint;
+    float gPadding;
+    float3 gVignetteColor;
+    float gAspect; // 絵の幅 / 高さ（ヴィネットを楕円でなく円にする）
 };
 
-struct PixelShaderOutput {
-    float4 color : SV_TARGET0;
-};
+float4 main(VertexShaderOutput input) : SV_TARGET {
+    float3 color = (gUsePointFilter > 0.5f)
+        ? gScene.Sample(gPointSampler, input.texcoord).rgb
+        : gScene.Sample(gLinearSampler, input.texcoord).rgb;
 
-PixelShaderOutput main(VertexShaderOutput input) {
-    PixelShaderOutput output;
+    // ブルーム（光を足す）
+    color += gBloom.Sample(gLinearSampler, input.texcoord).rgb * gBloomIntensity;
 
-    float4 sceneColor = gTexture.Sample(gSampler, input.texcoord);
+    // 色の調整: 明るさ → コントラスト（0.5 の灰色を中心に） → 彩度 → セピア → 色を掛ける
+    color += gBrightness;
+    color = (color - 0.5f) * gContrast + 0.5f;
+    float luminance = dot(color, float3(0.2126f, 0.7152f, 0.0722f));
+    color = lerp(luminance.xxx, color, gSaturation);
+    float3 sepiaColor = float3(
+        dot(color, float3(0.393f, 0.769f, 0.189f)),
+        dot(color, float3(0.349f, 0.686f, 0.168f)),
+        dot(color, float3(0.272f, 0.534f, 0.131f)));
+    color = lerp(color, sepiaColor, gSepia);
+    color *= gTint;
 
-    if (gBlurEnabled > 0.5f) {
-        sceneColor = gBlurTexture.Sample(gSampler, input.texcoord);
-    }
-
-    float4 bloomColor = gBloomTexture.Sample(gSampler, input.texcoord);
-
-    output.color.rgb = sceneColor.rgb + bloomColor.rgb * gBloomIntensity;
-
-    if (gSepia > 0.5f) {
-        // 回想シーン風のセピア調（定番の変換行列で赤み・黄み寄りの色に写像する）
-        float3 sepiaColor;
-        sepiaColor.r = dot(output.color.rgb, float3(0.393f, 0.769f, 0.189f));
-        sepiaColor.g = dot(output.color.rgb, float3(0.349f, 0.686f, 0.168f));
-        sepiaColor.b = dot(output.color.rgb, float3(0.272f, 0.534f, 0.131f));
-        output.color.rgb = saturate(sepiaColor);
-    } else {
-        // 輝度に変換し、gGrayscaleの値に応じて通常色とブレンドする（1.0で完全グレースケール）
-        float luminance = dot(output.color.rgb, float3(0.299f, 0.587f, 0.114f));
-        output.color.rgb = lerp(output.color.rgb, luminance.xxx, gGrayscale);
-    }
-
+    // ヴィネット: 中心からの距離（0 で中心、1 で角。縦横比を直して円にする）が半径より外側ほど gVignetteColor に寄せる
     if (gVignetteIntensity > 0.0f) {
-        // 中心からの距離(0=中心, 1=画面の縦横の端)を求め、gVignetteRadiusより外側だけ滑らかに減光する
-        float2 centered = input.texcoord - 0.5f;
-        float dist = length(centered) * 2.0f;
-        float vignette = smoothstep(gVignetteRadius, 1.0f, dist);
-        output.color.rgb *= (1.0f - vignette * gVignetteIntensity);
+        float2 centered = (input.texcoord - 0.5f) * float2(gAspect, 1.0f) * 2.0f;
+        float distanceFromCenter = length(centered) / sqrt(gAspect * gAspect + 1.0f);
+        float amount = smoothstep(gVignetteRadius, 1.0f, distanceFromCenter) * gVignetteIntensity;
+        color = lerp(color, gVignetteColor, amount);
     }
-
-    if (gDamageVignetteIntensity > 0.0f) {
-        // 被弾時の赤ヴィネットは上の黒ヴィネットとは別枠。半径は演出用に固定し、赤へ寄せる(乗算ではなくlerp)
-        float2 centered = input.texcoord - 0.5f;
-        float dist = length(centered) * 2.0f;
-        float damageVignette = smoothstep(0.35f, 1.0f, dist) * gDamageVignetteIntensity;
-        output.color.rgb = lerp(output.color.rgb, float3(0.6f, 0.0f, 0.0f), damageVignette);
-    }
-
-    output.color.a = sceneColor.a;
-
-    return output;
+    return float4(saturate(color), 1.0f);
 }

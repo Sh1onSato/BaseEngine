@@ -61,8 +61,12 @@ void Framework::Initialize() {
 	TextureManager::GetInstance()->Initialize(dxCommon.get(), srvManager.get());
 	ModelManager::GetInstance()->Initialize(dxCommon.get());
 
+	postProcess = std::make_unique<PostProcess>();
+	postProcess->Initialize(dxCommon.get(), srvManager.get());
+
 	renderScaler = std::make_unique<RenderScaler>();
 	renderScaler->Initialize(dxCommon.get(), srvManager.get());
+	renderScaler->SetPostProcess(postProcess.get());
 	// 保存済みの「描画の細かさ」を反映する（[F9] で変えた倍率は確認用なので保存しない）
 	renderScaler->SetScale(GameSettings::GetInstance()->GetRenderScale());
 
@@ -125,6 +129,13 @@ void Framework::Update() {
 	// [F7] 当たり判定の形と Rigidbody の速度を線で表示する / しない（全シーン共通）
 	if (input->TriggerKey(DIK_F7)) {
 		DebugDraw::SetColliderVisible(!DebugDraw::IsColliderVisible());
+	}
+	// [F6] 画面の効果（PostProcess）の調整用の窓を出す / しまう
+	if (input->TriggerKey(DIK_F6)) {
+		isPostProcessUIVisible = !isPostProcessUIVisible;
+	}
+	if (isPostProcessUIVisible) {
+		postProcess->DrawDebugUI();
 	}
 #endif
 	sceneManager->Update();
