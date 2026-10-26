@@ -45,12 +45,14 @@ void AnimationStateMachine::EnterState(const std::string& stateName, float blend
     currentState = stateName;
     stateTime = 0.0f;
 
-    if (state.blendAnimation.empty()) {
+    if (!state.blendPoints.empty()) {
+        target->PlayBlend2D(state.blendPoints, GetBlend2DParameter(state), blendSeconds);
+    } else if (state.blendAnimation.empty()) {
         target->PlayAnimation(state.animation, state.loop, blendSeconds);
     } else {
         target->PlayBlend(state.animation, state.blendAnimation, 0.0f, blendSeconds);
-        UpdateBlendRate();
     }
+    UpdateBlendRate();
     if (onStateChanged) {
         onStateChanged(previousState, currentState);
     }
@@ -79,12 +81,24 @@ bool AnimationStateMachine::CanTransition(const Transition& transition) {
     return true;
 }
 
+Vector2 AnimationStateMachine::GetBlend2DParameter(const State& state) const {
+    return { GetFloat(state.blendParameter), GetFloat(state.blendParameterY) };
+}
+
 void AnimationStateMachine::UpdateBlendRate() {
     auto it = states.find(currentState);
-    if (it == states.end() || it->second.blendAnimation.empty()) {
+    if (it == states.end()) {
         return;
     }
     const State& state = it->second;
+    target->SetCurrentAnimationSpeed(state.speed * (state.speedParameter.empty() ? 1.0f : GetFloat(state.speedParameter)));
+    if (!state.blendPoints.empty()) {
+        target->SetBlend2DParameter(GetBlend2DParameter(state));
+        return;
+    }
+    if (state.blendAnimation.empty()) {
+        return;
+    }
     const float range = state.blendParameterMax - state.blendParameterMin;
     const float value = GetFloat(state.blendParameter);
     const float rate = range != 0.0f ? (value - state.blendParameterMin) / range : 0.0f;

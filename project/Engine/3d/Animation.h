@@ -1,7 +1,15 @@
 #pragma once
 #include "GltfTypes.h"
 #include "Structs.h"
+#include <string>
 #include <vector>
+
+// 2次元で混ぜるアニメーション1本分（SkinnedObject3d::PlayBlend2D / AnimationStateMachine の State::blendPoints）。
+// position はそのアニメーションが一番合うパラメーターの値（8方向移動なら 前 = {0, 1}、右 = {1, 0}、止まる = {0, 0} など）
+struct AnimationBlendPoint {
+    std::string animation;
+    Vector2 position = { 0.0f, 0.0f };
+};
 
 // glTFのアニメーション1本(GltfAnimation)から、任意の時刻のノードの姿勢（translate / rotate / scale）を求める関数群。
 // データは GltfModelData が持っているので、ここでは何もコピーしない。

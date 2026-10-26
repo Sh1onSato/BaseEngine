@@ -1,4 +1,5 @@
 #pragma once
+#include "Animation.h"
 #include <functional>
 #include <map>
 #include <set>
@@ -19,6 +20,10 @@ class SkinnedObject3d;
 ///   animator.AddState("Move", { .animation = "Walk", .blendAnimation = "Run",   // Speed 1〜4 で Walk → Run に混ぜる
 ///                               .blendParameter = "Speed", .blendParameterMin = 1.0f, .blendParameterMax = 4.0f });
 ///   animator.AddState("Jump", { .animation = "Jump", .loop = false });
+///   animator.AddState("Strafe", { .blendParameter = "MoveX",                                    // 8方向移動（2次元で混ぜる）
+///                                 .blendPoints = { { "Idle", { 0, 0 } }, { "WalkF", { 0, 1 } }, { "WalkL", { -1, 0 } }, { "WalkR", { 1, 0 } } },
+///                                 .blendParameterY = "MoveY" });
+///   animator.AddState("Walk", { .animation = "Walk", .speedParameter = "Speed" });            // 移動の速さで足の運びの速さを変える
 ///   animator.AddTransition({ .from = "Idle", .to = "Move", .condition = [](const AnimationStateMachine& a) { return a.GetFloat("Speed") > 0.1f; } });
 ///   animator.AddTransition({ .from = "Move", .to = "Idle", .condition = [](const AnimationStateMachine& a) { return a.GetFloat("Speed") <= 0.1f; } });
 ///   animator.AddTransition({ .from = "*", .to = "Jump", .blendSeconds = 0.1f, .trigger = "Jump" });     // どの状態からでも
@@ -45,8 +50,15 @@ public:
         std::string blendParameter;
         float blendParameterMin = 0.0f;
         float blendParameterMax = 1.0f;
+        // 空でなければ、animation の代わりにこれらを2次元で混ぜる（SkinnedObject3d::PlayBlend2D。8方向移動など）。
+        // パラメーターは (blendParameter, blendParameterY) の値
+        std::vector<AnimationBlendPoint> blendPoints;
+        std::string blendParameterY;
         // false なら最後で止まる（requireFinished の遷移で次の状態へ）。混ぜるときは常にループ
         bool loop = true;
+        // この状態の再生の速さ。speedParameter が空でなければ、そのパラメーターの値も掛ける（移動の速さに足の運びを合わせるなど）
+        float speed = 1.0f;
+        std::string speedParameter;
     };
 
     // 状態の切り替え1つ分（いつ、どこへ）
@@ -96,8 +108,9 @@ private:
     void EnterState(const std::string& stateName, float blendSeconds);
     // transition が今使えるか（使えるならトリガーを消費する）
     bool CanTransition(const Transition& transition);
-    // 混ぜる状態なら、パラメーターから割合を決めて SkinnedObject3d に渡す
+    // 混ぜる状態なら、パラメーターから割合を決めて SkinnedObject3d に渡す。再生の速さも渡す
     void UpdateBlendRate();
+    Vector2 GetBlend2DParameter(const State& state) const;
 
     SkinnedObject3d* target = nullptr;
     std::map<std::string, State> states;

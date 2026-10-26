@@ -312,6 +312,9 @@
     <ClCompile Include="Engine\scene\SoundPropagationTestScene.cpp">
       <Filter>ソース ファイル\engine\scene</Filter>
     </ClCompile>
+    <ClCompile Include="Engine\scene\AnimationTestScene.cpp">
+      <Filter>ソース ファイル\engine\scene</Filter>
+    </ClCompile>
     <ClCompile Include="Engine\scene\PathfindTestScene.cpp">
       <Filter>ソース ファイル\engine\scene</Filter>
     </ClCompile>
@@ -686,6 +689,9 @@
       <Filter>ヘッダー ファイル\engine\scene</Filter>
     </ClInclude>
     <ClInclude Include="Engine\scene\SoundPropagationTestScene.h">
+      <Filter>ヘッダー ファイル\engine\scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\scene\AnimationTestScene.h">
       <Filter>ヘッダー ファイル\engine\scene</Filter>
     </ClInclude>
     <ClInclude Include="Engine\scene\PathfindTestScene.h">

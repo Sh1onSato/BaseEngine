@@ -202,6 +202,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="Engine\scene\PathfindTestScene.cpp" />
     <ClCompile Include="Engine\scene\Sound3DTestScene.cpp" />
     <ClCompile Include="Engine\scene\SoundPropagationTestScene.cpp" />
+    <ClCompile Include="Engine\scene\AnimationTestScene.cpp" />
     <ClCompile Include="Engine\ai\NavGrid.cpp" />
     <ClCompile Include="Engine\ai\PathFollower.cpp" />
     <ClCompile Include="Engine\object\Rigidbody.cpp" />
@@ -390,6 +391,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="Engine\scene\PathfindTestScene.h" />
     <ClInclude Include="Engine\scene\Sound3DTestScene.h" />
     <ClInclude Include="Engine\scene\SoundPropagationTestScene.h" />
+    <ClInclude Include="Engine\scene\AnimationTestScene.h" />
     <ClInclude Include="Engine\ai\NavGrid.h" />
     <ClInclude Include="Engine\ai\PathFollower.h" />
     <ClInclude Include="Engine\object\Rigidbody.h" />
