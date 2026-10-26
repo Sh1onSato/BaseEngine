@@ -17,6 +17,7 @@ namespace {
     constexpr int kUiLayer = 100;
     constexpr float kAutoCycleSeconds = 2.5f; // 見本を自動で切り替える間隔
     constexpr float kDamageSeconds = 0.6f;    // 被弾の赤い縁が消えるまでの秒数（見本では繰り返す）
+    constexpr size_t kDamagePresetIndex = 6;  // 被弾の赤い縁の見本の番号（kPresetNames と MakePreset の case と同じ）
 
     const std::array<const char*, 8> kPresetNames = {
         "効果なし", "ブルーム", "画面全体のぼかし", "白黒（彩度 0）", "セピア", "ヴィネット（黒）", "被弾の赤い縁（時間で薄くなる）", "夕方の色味",
@@ -109,14 +110,25 @@ void PostProcessTestScene::Finalize() {
 }
 
 void PostProcessTestScene::Update() {
+    const size_t previousIndex = presetIndex;
     UpdateInput();
     presetTimer += Time::GetDeltaTime();
-    if (isAutoCycle && presetTimer >= kAutoCycleSeconds) {
+    // [F6] の調整の窓を開いている間は、触っている値が次の見本で消えないよう自動で進めない
+    const bool isTuning = Framework::GetInstance()->IsPostProcessUIVisible();
+    if (isAutoCycle && !isTuning && presetTimer >= kAutoCycleSeconds) {
         presetIndex = (presetIndex + 1) % kPresetNames.size();
         presetTimer = 0.0f;
     }
-    // 毎フレーム作り直して入れる（被弾の赤い縁のように、値を時間で動かす使い方の例）
-    Framework::GetInstance()->GetPostProcess()->GetSettings() = MakePreset(presetIndex, presetTimer);
+    PostEffectSettings& effect = Framework::GetInstance()->GetPostProcess()->GetSettings();
+    // 見本が変わったときだけ設定を入れ直す（毎フレーム入れると [F6] の窓で変えた値が戻ってしまう）
+    if (presetIndex != previousIndex || !hasAppliedPreset) {
+        effect = MakePreset(presetIndex, presetTimer);
+        hasAppliedPreset = true;
+    }
+    // 被弾の赤い縁は、縁の濃さだけを時間で動かす（値を時間で動かす使い方の例）
+    if (presetIndex == kDamagePresetIndex) {
+        effect.vignetteIntensity = MakePreset(presetIndex, presetTimer).vignetteIntensity;
+    }
 
     camera->Update();
     for (const std::unique_ptr<Object3d>& object : objects) {
@@ -175,7 +187,7 @@ PostEffectSettings PostProcessTestScene::MakePreset(size_t index, float time) co
         effect.vignetteIntensity = 0.8f;
         effect.vignetteRadius = 0.4f;
         break;
-    case 6: {
+    case kDamagePresetIndex: {
         // 被弾した瞬間が一番濃く、kDamageSeconds で消える（見本では繰り返す）
         const float t = std::fmod(time, kDamageSeconds) / kDamageSeconds;
         effect.vignetteIntensity = 0.7f * (1.0f - t);
@@ -224,6 +236,8 @@ void PostProcessTestScene::DrawShadowPass() {
 }
 
 std::string PostProcessTestScene::BuildStatusText() const {
+    const bool isTuning = Framework::GetInstance()->IsPostProcessUIVisible();
     return std::format("見本 {}/{}: {}\n自動で切り替え: {}",
-                       presetIndex + 1, kPresetNames.size(), kPresetNames[presetIndex], isAutoCycle ? "ON" : "OFF");
+                       presetIndex + 1, kPresetNames.size(), kPresetNames[presetIndex],
+                       isTuning ? "止めています（[F6] の窓を開いている間）" : (isAutoCycle ? "ON" : "OFF"));
 }

@@ -56,6 +56,8 @@ public:
 	SceneManager* GetSceneManager() const { return sceneManager.get(); }
 	RenderScaler* GetRenderScaler() const { return renderScaler.get(); }
 	PostProcess* GetPostProcess() const { return postProcess.get(); }
+	// Debug の [F6] で PostProcess の調整の窓を開いているか（テストシーンが自動で値を変えないようにするため）
+	bool IsPostProcessUIVisible() const { return isPostProcessUIVisible; }
 
 protected:
 	std::unique_ptr<WinApp> winApp = nullptr;

@@ -46,4 +46,6 @@ private:
     size_t presetIndex = 0;
     bool isAutoCycle = true; // 一定時間ごとに次の見本へ進む
     float presetTimer = 0.0f;
+    // 最初の見本をまだ入れていないか（最初のフレームに入れる）
+    bool hasAppliedPreset = false;
 };
