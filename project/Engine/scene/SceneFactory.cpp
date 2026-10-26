@@ -12,6 +12,7 @@
 #include "PostProcessTestScene.h"
 #include "PathfindTestScene.h"
 #include "Sound3DTestScene.h"
+#include "SoundPropagationTestScene.h"
 #include "Logger.h"
 #include <format>
 
@@ -69,6 +70,10 @@ BaseScene* SceneFactory::CreateScene(const std::string& sceneName) {
     else if (sceneName == "SOUND3D_TEST") {
         // 3D の音（Play3D・リスナー・SetPan）の検証用シーン
         newScene = new Sound3DTestScene();
+    }
+    else if (sceneName == "SOUND_PROPAGATION_TEST") {
+        // 音の回り込み（SoundPropagation・扉・壁越し）の検証用シーン
+        newScene = new SoundPropagationTestScene();
     }
     else {
         // 該当なしの場合は無言でnullptrを返すと「シーンが何も更新・描画されない」という

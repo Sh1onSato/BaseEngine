@@ -309,6 +309,9 @@
     <ClCompile Include="Engine\scene\Sound3DTestScene.cpp">
       <Filter>ソース ファイル\engine\scene</Filter>
     </ClCompile>
+    <ClCompile Include="Engine\scene\SoundPropagationTestScene.cpp">
+      <Filter>ソース ファイル\engine\scene</Filter>
+    </ClCompile>
     <ClCompile Include="Engine\scene\PathfindTestScene.cpp">
       <Filter>ソース ファイル\engine\scene</Filter>
     </ClCompile>
@@ -382,6 +385,9 @@
       <Filter>ソース ファイル\engine\audo</Filter>
     </ClCompile>
     <ClCompile Include="Engine\audio\AudioManager.cpp">
+      <Filter>ソース ファイル\engine\audo</Filter>
+    </ClCompile>
+    <ClCompile Include="Engine\audio\SoundPropagation.cpp">
       <Filter>ソース ファイル\engine\audo</Filter>
     </ClCompile>
     <ClCompile Include="Engine\base\ImGuiManager.cpp">
@@ -679,6 +685,9 @@
     <ClInclude Include="Engine\scene\Sound3DTestScene.h">
       <Filter>ヘッダー ファイル\engine\scene</Filter>
     </ClInclude>
+    <ClInclude Include="Engine\scene\SoundPropagationTestScene.h">
+      <Filter>ヘッダー ファイル\engine\scene</Filter>
+    </ClInclude>
     <ClInclude Include="Engine\scene\PathfindTestScene.h">
       <Filter>ヘッダー ファイル\engine\scene</Filter>
     </ClInclude>
@@ -752,6 +761,9 @@
       <Filter>ヘッダー ファイル\engine\audo</Filter>
     </ClInclude>
     <ClInclude Include="Engine\audio\AudioManager.h">
+      <Filter>ヘッダー ファイル\engine\audo</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\audio\SoundPropagation.h">
       <Filter>ヘッダー ファイル\engine\audo</Filter>
     </ClInclude>
     <ClInclude Include="Engine\base\ImGuiManager.h">

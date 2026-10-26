@@ -165,6 +165,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="Engine\audio\Audio.cpp" />
     <ClCompile Include="Engine\audio\AudioCommon.cpp" />
     <ClCompile Include="Engine\audio\AudioManager.cpp" />
+    <ClCompile Include="Engine\audio\SoundPropagation.cpp" />
     <ClCompile Include="Engine\base\ImGuiManager.cpp" />
     <ClCompile Include="Engine\base\MyGame.cpp" />
     <ClCompile Include="Engine\base\PostProcess.cpp" />
@@ -200,6 +201,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="Engine\scene\PostProcessTestScene.cpp" />
     <ClCompile Include="Engine\scene\PathfindTestScene.cpp" />
     <ClCompile Include="Engine\scene\Sound3DTestScene.cpp" />
+    <ClCompile Include="Engine\scene\SoundPropagationTestScene.cpp" />
     <ClCompile Include="Engine\ai\NavGrid.cpp" />
     <ClCompile Include="Engine\ai\PathFollower.cpp" />
     <ClCompile Include="Engine\object\Rigidbody.cpp" />
@@ -346,6 +348,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="Engine\audio\Audio.h" />
     <ClInclude Include="Engine\audio\AudioCommon.h" />
     <ClInclude Include="Engine\audio\AudioManager.h" />
+    <ClInclude Include="Engine\audio\SoundPropagation.h" />
     <ClInclude Include="Engine\base\ImGuiManager.h" />
     <ClInclude Include="Engine\base\MyGame.h" />
     <ClInclude Include="Engine\base\PostProcess.h" />
@@ -386,6 +389,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="Engine\scene\PostProcessTestScene.h" />
     <ClInclude Include="Engine\scene\PathfindTestScene.h" />
     <ClInclude Include="Engine\scene\Sound3DTestScene.h" />
+    <ClInclude Include="Engine\scene\SoundPropagationTestScene.h" />
     <ClInclude Include="Engine\ai\NavGrid.h" />
     <ClInclude Include="Engine\ai\PathFollower.h" />
     <ClInclude Include="Engine\object\Rigidbody.h" />
