@@ -6,6 +6,7 @@
 #include "TextureManager.h"
 #include "ModelManager.h"
 #include "Framework.h"
+#include "DebugDraw.h"
 #include <algorithm>
 
 SceneManager::SceneManager() = default;
@@ -33,6 +34,9 @@ void SceneManager::SwapScene() {
     // 旧シーンまでに読んだモデルと画像のうち、新シーンの Initialize で使われなかった物を次のフレームの始めに解放する
     ModelManager::GetInstance()->OnSceneChanged();
     TextureManager::GetInstance()->OnSceneChanged();
+    // 旧シーンで積んだ確認用の線（秒数付きの物）を残さない。旧シーンのカメラを指したままにもしない
+    DebugDraw::Clear();
+    DebugDraw::SetCamera(nullptr);
 
     if (currentScene) {
         // 次のシーンに自分（マネージャ）を教える
@@ -91,12 +95,16 @@ void SceneManager::Draw() {
     if (currentScene) {
         currentScene->Draw();
     }
+    // 確認用の 3D の線（シーンの深度で物に隠れるように、3D と同じ描画先に描く）
+    DebugDraw::Flush3D();
     // 内部解像度を下げて描いた 3D を画面に引き伸ばし、描画先をバックバッファに戻す（UI はこの後に等倍で描く）
     Framework::GetInstance()->GetRenderScaler()->EndScene();
     // シーンが積んだスプライトをレイヤー順に描画する
     if (spriteCommon) {
         spriteCommon->Flush();
     }
+    // 確認用の 2D の線（UI より手前、フェードより奥）
+    DebugDraw::Flush2D();
 
     // フェード用の板を最前面に描画
     // （シーンのFlushとは別に後からFlushするので、レイヤー値に関係なく必ず一番手前になる）

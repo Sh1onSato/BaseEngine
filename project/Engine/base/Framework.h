@@ -9,6 +9,7 @@
 #include "Object3dCommon.h"
 #include "ParticleCommon.h"
 #include "SkyboxCommon.h"
+#include "DebugDraw.h"
 #include "SceneManager.h"
 #include "ImGuiManager.h"
 #include "AudioManager.h"
@@ -68,6 +69,8 @@ protected:
 	std::unique_ptr<Object3dCommon> object3dCommon = nullptr;
 	std::unique_ptr<ParticleCommon> particleCommon = nullptr;
 	std::unique_ptr<SkyboxCommon> skyboxCommon = nullptr;
+	// 確認用の線（DebugDraw::Line などの静的関数から使う）
+	std::unique_ptr<DebugDraw> debugDraw = nullptr;
 	std::unique_ptr<SceneManager> sceneManager = nullptr;
 
 	bool endRequest = false;

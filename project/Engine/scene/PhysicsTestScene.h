@@ -33,6 +33,8 @@ private:
     // シャドウパスで外されたメインの描画先（RTV / DSV）を張り直す
     void RebindMainRenderTarget();
     std::string BuildStatusText() const;
+    // [G] で表示する確認用の線（格子・プレイヤーの速度と地面の向き・真下へのレイ・画面の枠）
+    void AddDebugLines();
 
     GameObjectManager objects;
     // CameraManager が持ち主なので借りるだけ
@@ -46,4 +48,5 @@ private:
     bool isDetailVisible = false;
     bool isSlowMotion = false;
     bool isInterpolationEnabled = true;
+    bool isDebugLineVisible = true;
 };

@@ -1,4 +1,5 @@
 #include "GameObjectManager.h"
+#include "DebugDraw.h"
 #include "GameTime.h"
 #include <algorithm>
 #include <cassert>
@@ -8,6 +9,9 @@
 namespace {
     // 1フレームに計算する物理の最大回数（これ以上たまった時間は捨てる）
     constexpr int kMaxPhysicsStepsPerFrame = 5;
+    // 当たり判定の表示（[F7]）: 速度の矢印の長さ（速さ 1 あたり）と、非アクティブの物の線の濃さ
+    constexpr float kVelocityArrowScale = 0.2f;
+    constexpr float kInactiveColliderAlpha = 0.3f;
 
     bool IsSamePosition(const Vector3& a, const Vector3& b) {
         return a.x == b.x && a.y == b.y && a.z == b.z;
@@ -57,7 +61,57 @@ void GameObjectManager::Draw() {
     }
     modelBatcher.Flush();
     isUpdating = false;
+    // 補間した描画の位置に合わせて、見た目のモデルと重なるように描く
+    if (DebugDraw::IsColliderVisible()) {
+        AddColliderDebugLines();
+    }
     EndRenderInterpolation();
+}
+
+void GameObjectManager::AddColliderDebugLines() const {
+    for (const std::unique_ptr<GameObject>& object : objects) {
+        if (object->IsDestroyed()) {
+            continue;
+        }
+        const Rigidbody* body = object->GetRigidbody();
+        // 種類で色を分ける。非アクティブの物は判定されないので暗くする
+        for (const std::unique_ptr<Collider>& collider : object->GetColliders()) {
+            if (!collider->IsEnabled()) {
+                continue;
+            }
+            Vector4 color = DebugDraw::kGreen;
+            if (collider->GetType() == ColliderType::kTrigger) {
+                color = DebugDraw::kYellow;
+            } else if (collider->GetType() == ColliderType::kStatic) {
+                color = DebugDraw::kGray;
+            } else if (body && body->IsKinematic()) {
+                color = DebugDraw::kBlue;
+            }
+            if (!object->IsActive()) {
+                color.w = kInactiveColliderAlpha;
+            }
+            switch (collider->GetShape()) {
+            case ColliderShape::kSphere: DebugDraw::Sphere(collider->GetWorldSphere(), color); break;
+            case ColliderShape::kAABB: DebugDraw::Box(collider->GetWorldAABB(), color); break;
+            case ColliderShape::kOBB: DebugDraw::Box(collider->GetWorldOBB(), color); break;
+            case ColliderShape::kCapsule: DebugDraw::Capsule(collider->GetWorldCapsule(), color); break;
+            case ColliderShape::kCircle: DebugDraw::Circle2D(collider->GetWorldCircle(), color); break;
+            case ColliderShape::kRect: DebugDraw::Rect2D(collider->GetWorldRect(), color); break;
+            }
+        }
+        // 動いている Rigidbody の速度（隠れない矢印）。2D か 3D かは最初のコライダーで決める
+        if (!body || !object->IsActive() || body->IsKinematic()) {
+            continue;
+        }
+        const Vector3& position = object->transform.translate;
+        const Vector3 arrow = body->velocity * kVelocityArrowScale;
+        const Collider* first = object->GetCollider();
+        if (first && first->Is2D()) {
+            DebugDraw::Arrow2D({ position.x, position.y }, { position.x + arrow.x, position.y + arrow.y }, DebugDraw::kMagenta);
+        } else {
+            DebugDraw::Arrow(position, position + arrow, DebugDraw::kMagenta, 0.0f, false);
+        }
+    }
 }
 
 void GameObjectManager::DrawShadow(const Matrix4x4& lightViewProjection) {

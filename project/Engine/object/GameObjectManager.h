@@ -106,6 +106,8 @@ private:
     void RemoveDestroyed();
     // Update 中に作られた物を本リストへ移す
     void MovePendingObjects();
+    // 当たり判定の形と Rigidbody の速度を確認用の線で描く（DebugDraw::IsColliderVisible() のとき Draw から呼ぶ）
+    void AddColliderDebugLines() const;
     // 検索用: Destroy されていない物すべてに func を呼び、func が true を返したらそこで止める
     template<class Func>
     void ForEachAlive(Func func) const;

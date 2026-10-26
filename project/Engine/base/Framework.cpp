@@ -78,6 +78,9 @@ void Framework::Initialize() {
 	skyboxCommon = std::make_unique<SkyboxCommon>();
 	skyboxCommon->Initialize(dxCommon.get(), srvManager.get());
 
+	debugDraw = std::make_unique<DebugDraw>();
+	debugDraw->Initialize(dxCommon.get());
+
 	CameraManager::GetInstance()->Initialize();
 
 	sceneManager = std::make_unique<SceneManager>();
@@ -118,6 +121,10 @@ void Framework::Update() {
 		const float scale = renderScaler->GetScale();
 		renderScaler->SetScale(scale > 0.9f ? 0.75f : (scale > 0.6f ? 0.5f : (scale > 0.3f ? 0.25f : 1.0f)));
 		Logger::Log(std::format("RenderScaler: 内部解像度の倍率 {:.2f}\n", renderScaler->GetScale()));
+	}
+	// [F7] 当たり判定の形と Rigidbody の速度を線で表示する / しない（全シーン共通）
+	if (input->TriggerKey(DIK_F7)) {
+		DebugDraw::SetColliderVisible(!DebugDraw::IsColliderVisible());
 	}
 #endif
 	sceneManager->Update();

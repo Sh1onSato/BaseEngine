@@ -372,6 +372,9 @@
     <ClCompile Include="Engine\3d\Skybox.cpp">
       <Filter>ソース ファイル\engine\3d</Filter>
     </ClCompile>
+    <ClCompile Include="Engine\3d\DebugDraw.cpp">
+      <Filter>ソース ファイル\engine\3d</Filter>
+    </ClCompile>
     <ClCompile Include="Engine\3d\SkyboxCommon.cpp">
       <Filter>ソース ファイル\engine\3d</Filter>
     </ClCompile>
@@ -387,6 +390,12 @@
       <Filter>シェーダーファイル</Filter>
     </FxCompile>
     <FxCompile Include="Resources\shaders\Sprite.PS.hlsl">
+      <Filter>シェーダーファイル</Filter>
+    </FxCompile>
+    <FxCompile Include="Resources\shaders\DebugLine.VS.hlsl">
+      <Filter>シェーダーファイル</Filter>
+    </FxCompile>
+    <FxCompile Include="Resources\shaders\DebugLine.PS.hlsl">
       <Filter>シェーダーファイル</Filter>
     </FxCompile>
     <FxCompile Include="Resources\shaders\RenderScale.VS.hlsl">
@@ -722,6 +731,9 @@
       <Filter>ヘッダー ファイル\engine\3d</Filter>
     </ClInclude>
     <ClInclude Include="Engine\3d\Skybox.h">
+      <Filter>ヘッダー ファイル\engine\3d</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine\3d\DebugDraw.h">
       <Filter>ヘッダー ファイル\engine\3d</Filter>
     </ClInclude>
     <ClInclude Include="Engine\3d\SkyboxCommon.h">

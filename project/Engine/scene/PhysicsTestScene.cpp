@@ -1,6 +1,8 @@
 #include "PhysicsTestScene.h"
+#include "Calculation.h"
 #include "Camera.h"
 #include "CameraManager.h"
+#include "DebugDraw.h"
 #include "Framework.h"
 #include "GameTime.h"
 #include "Input.h"
@@ -25,6 +27,9 @@ namespace {
     constexpr float kSlowTimeScale = 0.2f;
     constexpr float kPlatformSpeed = 2.0f;
     constexpr float kPlatformRange = 3.0f;      // 動く床が中心から左右に動く距離
+    constexpr float kDebugRayLength = 30.0f;
+    constexpr float kShotRaySeconds = 2.0f;     // [J] で撃ったレイを残す秒数
+    constexpr float kVelocityArrowScale = 0.3f; // 速度の矢印の長さ（速さ 1 あたり）
 
     const Vector4 kFloorColor = { 0.55f, 0.55f, 0.6f, 1.0f };
     const Vector4 kWallColor = { 0.4f, 0.4f, 0.45f, 1.0f };
@@ -207,7 +212,7 @@ void PhysicsTestScene::InitializeTexts() {
 
     helpText = std::make_unique<Text>();
     helpText->Initialize(spriteCommon, 18.0f);
-    helpText->SetText("[←↑↓→] 移動  [Space] ジャンプ  [R] 並べ直す  [T] スロー  [I] 補間  [H] 説明");
+    helpText->SetText("[←↑↓→] 移動  [Space] ジャンプ  [R] 並べ直す  [T] スロー  [I] 補間  [H] 説明  [G] 線  [J] レイ  [M] 黒帯");
     helpText->SetLayer(kUiLayer);
 
     detailText = std::make_unique<Text>();
@@ -293,6 +298,7 @@ void PhysicsTestScene::SpawnAll() {
 void PhysicsTestScene::Finalize() {
     objects.Clear();
     Time::SetTimeScale(1.0f); // スローのまま次のシーンへ行かないように
+    Screen::SetScaleMode(Screen::ScaleMode::kLetterbox); // [M] で変えた表示モードを戻す（MyGame の既定）
     // 登録したカメラを消す（次のシーンに残さない）
     CameraManager::GetInstance()->Initialize();
 }
@@ -301,6 +307,9 @@ void PhysicsTestScene::Update() {
     UpdateInput();
     objects.Update();
     camera->Update();
+    if (isDebugLineVisible) {
+        AddDebugLines();
+    }
 
     statusText->SetText(BuildStatusText());
     LayoutTexts();
@@ -326,6 +335,56 @@ void PhysicsTestScene::UpdateInput() {
     if (input->TriggerKey(DIK_H)) {
         isDetailVisible = !isDetailVisible;
     }
+    if (input->TriggerKey(DIK_G)) {
+        isDebugLineVisible = !isDebugLineVisible;
+    }
+    // [M] 黒帯 / 画面いっぱい（2D の線がゲームの絵の端に沿うかの確認用）
+    if (input->TriggerKey(DIK_M)) {
+        Screen::SetScaleMode(Screen::GetScaleMode() == Screen::ScaleMode::kLetterbox ? Screen::ScaleMode::kExpand
+                                                                                     : Screen::ScaleMode::kLetterbox);
+    }
+    // [J] プレイヤーから右へレイを撃ち、2秒間残す（duration の確認）
+    if (input->TriggerKey(DIK_J)) {
+        if (const PhysicsPlayer* player = objects.FindByType<PhysicsPlayer>()) {
+            const Ray ray = { player->transform.translate + Vector3{ 0.6f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f } };
+            RaycastHit hit{};
+            if (objects.GetCollisionManager().Raycast(ray, kDebugRayLength, 0xFFFFFFFF, &hit)) {
+                DebugDraw::Line(ray.origin, hit.hitPoint, DebugDraw::kMagenta, kShotRaySeconds);
+                DebugDraw::Arrow(hit.hitPoint, hit.hitPoint + hit.normal, DebugDraw::kCyan, kShotRaySeconds);
+            } else {
+                DebugDraw::Ray(ray, kDebugRayLength, DebugDraw::kMagenta, kShotRaySeconds);
+            }
+        }
+    }
+}
+
+void PhysicsTestScene::AddDebugLines() {
+    // 床の上面（y = 0）より少し上に格子と原点の軸
+    DebugDraw::Grid({ 0.0f, 0.01f, 0.0f }, 24.0f, 24);
+    DebugDraw::Axes(Calculation::MakeIdentity4x4(), 2.0f);
+
+    if (const PhysicsPlayer* player = objects.FindByType<PhysicsPlayer>()) {
+        const Vector3& position = player->transform.translate;
+        const Rigidbody* body = player->GetRigidbody();
+        // 当たり判定の球（物に隠れる）と、速度・地面の向きの矢印（隠れない）
+        DebugDraw::Sphere({ position, 0.5f }, DebugDraw::kGreen);
+        DebugDraw::Arrow(position, position + body->velocity * kVelocityArrowScale, DebugDraw::kYellow, 0.0f, false);
+        if (body->IsGrounded()) {
+            DebugDraw::Arrow(position, position + body->GetGroundNormal(), DebugDraw::kCyan, 0.0f, false);
+        }
+        // 足元から真下へのレイ。当たった所に十字
+        const Ray down = { position - Vector3{ 0.0f, 0.51f, 0.0f }, { 0.0f, -1.0f, 0.0f } };
+        RaycastHit hit{};
+        if (objects.GetCollisionManager().Raycast(down, kDebugRayLength, 0xFFFFFFFF, &hit)) {
+            DebugDraw::Line(down.origin, hit.hitPoint, DebugDraw::kRed, 0.0f, false);
+            DebugDraw::Cross(hit.hitPoint, 0.4f, DebugDraw::kRed, 0.0f, false);
+        }
+    }
+
+    // 2D: ゲーム画面の枠（画面に固定）。黒帯や画面いっぱいモードでも、ゲームの絵の端に沿うこと
+    const Vector2 gameSize = Screen::GetGameSize();
+    DebugDraw::Rect2D({ { 4.0f, 4.0f }, { gameSize.x - 4.0f, gameSize.y - 4.0f } }, DebugDraw::kMagenta, 0.0f, false);
+    DebugDraw::Circle2D({ { gameSize.x * 0.5f, gameSize.y * 0.5f }, 12.0f }, DebugDraw::kWhite, 0.0f, false);
 }
 
 void PhysicsTestScene::SetInterpolationForAll(bool enable) {
