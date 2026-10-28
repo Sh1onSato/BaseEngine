@@ -16,6 +16,12 @@ void MyGame::Initialize() {
 	//               端に置くUIは Screen::GetAnchoredPosition() で置くこと）
 	Screen::SetScaleMode(Screen::ScaleMode::kLetterbox);
 
+	// 全部のシーンで使う画面の効果（シーンを切り替えるとこの設定に戻る）。
+	// 物が接している所を暗くする（SSAO）を ON にして、物が浮いて見えないようにする。要らないシーンは GetSettings() で OFF にする
+	PostEffectSettings defaultEffect;
+	defaultEffect.ambientOcclusionEnabled = true;
+	GetPostProcess()->SetDefaultSettings(defaultEffect);
+
 	// 最初のアクティブシーンを設定
 	// ※スキニング検証(SkinningTestScene)を試す場合は、ここを一時的に"SKINNING_TEST"に変更してください（恒久変更はしないこと）
 	sceneManager->ChangeScene("MATERIAL_TEST");

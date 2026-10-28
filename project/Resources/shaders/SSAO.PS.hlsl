@@ -40,7 +40,9 @@ float InterleavedGradientNoise(float2 pixel) {
 }
 
 float4 main(VertexShaderOutput input) : SV_TARGET {
-    float2 uv = input.texcoord;
+    // 半分の解像度で計算しているので、そのままの UV は深度の2ピクセルのちょうど境目になる。
+    // 境目だと隣を読んだときに同じピクセルを読むことがあり（差が 0 で面の向きが壊れて横縞が出る）、深度のピクセルの真ん中にそろえる
+    float2 uv = (floor(input.texcoord / gDepthTexel) + 0.5f) * gDepthTexel;
     float depth = gDepth.SampleLevel(gPointSampler, uv, 0.0f);
     if (depth >= kBackgroundDepth) {
         return float4(1.0f, 1.0f, 1.0f, 1.0f);
@@ -54,7 +56,11 @@ float4 main(VertexShaderOutput input) : SV_TARGET {
     float3 up = position - ViewPosition(uv - float2(0.0f, gDepthTexel.y));
     float3 horizontal = abs(right.z) < abs(left.z) ? right : left;
     float3 vertical = abs(down.z) < abs(up.z) ? down : up;
-    float3 normal = normalize(cross(horizontal, vertical));
+    float3 crossed = cross(horizontal, vertical);
+    if (dot(crossed, crossed) < 1e-12f) {
+        return float4(1.0f, 1.0f, 1.0f, 1.0f); // 向きが決まらない（念のため）
+    }
+    float3 normal = normalize(crossed);
     if (dot(normal, position) > 0.0f) {
         normal = -normal; // カメラの方を向かせる
     }
