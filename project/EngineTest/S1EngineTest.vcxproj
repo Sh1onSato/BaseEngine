@@ -20,7 +20,7 @@
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{04440f24-6aac-4fe2-96f7-0fd53439d837}</ProjectGuid>
-    <RootNamespace>CG20001</RootNamespace>
+    <RootNamespace>S1EngineTest</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -48,88 +48,88 @@
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>
   <ImportGroup Label="Shared">
-    <Import Project="Engine.vcxitems" Label="Shared" />
+    <Import Project="..\Engine\Engine.vcxitems" Label="Shared" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-    <Import Project="Engine.props" />
+    <Import Project="..\Engine\Engine.props" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-    <Import Project="Engine.props" />
+    <Import Project="..\Engine\Engine.props" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Development|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-    <Import Project="Engine.props" />
+    <Import Project="..\Engine\Engine.props" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <OutDir>$(SolutionDir)..\generated\outputs\$(Configuration)\</OutDir>
-    <IntDir>$(SolutionDir)..\generated\obj\$(ProjectName)\$(Configuration)\</IntDir>
+    <OutDir>$(MSBuildThisFileDirectory)..\..\generated\outputs\$(Configuration)\</OutDir>
+    <IntDir>$(MSBuildThisFileDirectory)..\..\generated\obj\$(ProjectName)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>$(SolutionDir)..\generated\outputs\$(Configuration)\</OutDir>
-    <IntDir>$(SolutionDir)..\generated\obj\$(ProjectName)\$(Configuration)\</IntDir>
+    <OutDir>$(MSBuildThisFileDirectory)..\..\generated\outputs\$(Configuration)\</OutDir>
+    <IntDir>$(MSBuildThisFileDirectory)..\..\generated\obj\$(ProjectName)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Development|x64'">
-    <OutDir>$(SolutionDir)..\generated\outputs\$(Configuration)\</OutDir>
-    <IntDir>$(SolutionDir)..\generated\obj\$(ProjectName)\$(Configuration)\</IntDir>
+    <OutDir>$(MSBuildThisFileDirectory)..\..\generated\outputs\$(Configuration)\</OutDir>
+    <IntDir>$(MSBuildThisFileDirectory)..\..\generated\obj\$(ProjectName)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(ProjectDir)EngineTest;$(ProjectDir)EngineTest\scene;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)scene;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="EngineTest\main.cpp" />
-    <ClCompile Include="EngineTest\MyGame.cpp" />
-    <ClCompile Include="EngineTest\scene\AnimationTestScene.cpp" />
-    <ClCompile Include="EngineTest\scene\EngineTestScene.cpp" />
-    <ClCompile Include="EngineTest\scene\GameScene.cpp" />
-    <ClCompile Include="EngineTest\scene\InstancingTestScene.cpp" />
-    <ClCompile Include="EngineTest\scene\LevelTestScene.cpp" />
-    <ClCompile Include="EngineTest\scene\MaterialTestScene.cpp" />
-    <ClCompile Include="EngineTest\scene\ObjectTest3DMode.cpp" />
-    <ClCompile Include="EngineTest\scene\ObjectTest3DObjects.cpp" />
-    <ClCompile Include="EngineTest\scene\ObjectTestObjects.cpp" />
-    <ClCompile Include="EngineTest\scene\ObjectTestScene.cpp" />
-    <ClCompile Include="EngineTest\scene\PathfindTestScene.cpp" />
-    <ClCompile Include="EngineTest\scene\PhysicsTestScene.cpp" />
-    <ClCompile Include="EngineTest\scene\PostProcessTestScene.cpp" />
-    <ClCompile Include="EngineTest\scene\RigidbodyTestScene.cpp" />
-    <ClCompile Include="EngineTest\scene\SkinningTestScene.cpp" />
-    <ClCompile Include="EngineTest\scene\Sound3DTestScene.cpp" />
-    <ClCompile Include="EngineTest\scene\SoundPropagationTestScene.cpp" />
-    <ClCompile Include="EngineTest\scene\TiledTestScene.cpp" />
-    <ClCompile Include="EngineTest\scene\TitleScene.cpp" />
-    <ClCompile Include="EngineTest\scene\TweenTestScene.cpp" />
-    <ClCompile Include="EngineTest\scene\UITestScene.cpp" />
-    <ClCompile Include="EngineTest\SceneFactory.cpp" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="MyGame.cpp" />
+    <ClCompile Include="scene\AnimationTestScene.cpp" />
+    <ClCompile Include="scene\EngineTestScene.cpp" />
+    <ClCompile Include="scene\GameScene.cpp" />
+    <ClCompile Include="scene\InstancingTestScene.cpp" />
+    <ClCompile Include="scene\LevelTestScene.cpp" />
+    <ClCompile Include="scene\MaterialTestScene.cpp" />
+    <ClCompile Include="scene\ObjectTest3DMode.cpp" />
+    <ClCompile Include="scene\ObjectTest3DObjects.cpp" />
+    <ClCompile Include="scene\ObjectTestObjects.cpp" />
+    <ClCompile Include="scene\ObjectTestScene.cpp" />
+    <ClCompile Include="scene\PathfindTestScene.cpp" />
+    <ClCompile Include="scene\PhysicsTestScene.cpp" />
+    <ClCompile Include="scene\PostProcessTestScene.cpp" />
+    <ClCompile Include="scene\RigidbodyTestScene.cpp" />
+    <ClCompile Include="scene\SkinningTestScene.cpp" />
+    <ClCompile Include="scene\Sound3DTestScene.cpp" />
+    <ClCompile Include="scene\SoundPropagationTestScene.cpp" />
+    <ClCompile Include="scene\TiledTestScene.cpp" />
+    <ClCompile Include="scene\TitleScene.cpp" />
+    <ClCompile Include="scene\TweenTestScene.cpp" />
+    <ClCompile Include="scene\UITestScene.cpp" />
+    <ClCompile Include="SceneFactory.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="EngineTest\MyGame.h" />
-    <ClInclude Include="EngineTest\scene\AnimationTestScene.h" />
-    <ClInclude Include="EngineTest\scene\EngineTestScene.h" />
-    <ClInclude Include="EngineTest\scene\GameScene.h" />
-    <ClInclude Include="EngineTest\scene\InstancingTestScene.h" />
-    <ClInclude Include="EngineTest\scene\LevelTestScene.h" />
-    <ClInclude Include="EngineTest\scene\MaterialTestScene.h" />
-    <ClInclude Include="EngineTest\scene\ObjectTest3DMode.h" />
-    <ClInclude Include="EngineTest\scene\ObjectTest3DObjects.h" />
-    <ClInclude Include="EngineTest\scene\ObjectTestObjects.h" />
-    <ClInclude Include="EngineTest\scene\ObjectTestScene.h" />
-    <ClInclude Include="EngineTest\scene\PathfindTestScene.h" />
-    <ClInclude Include="EngineTest\scene\PhysicsTestScene.h" />
-    <ClInclude Include="EngineTest\scene\PostProcessTestScene.h" />
-    <ClInclude Include="EngineTest\scene\RigidbodyTestScene.h" />
-    <ClInclude Include="EngineTest\scene\SkinningTestScene.h" />
-    <ClInclude Include="EngineTest\scene\Sound3DTestScene.h" />
-    <ClInclude Include="EngineTest\scene\SoundPropagationTestScene.h" />
-    <ClInclude Include="EngineTest\scene\TiledTestScene.h" />
-    <ClInclude Include="EngineTest\scene\TitleScene.h" />
-    <ClInclude Include="EngineTest\scene\TweenTestScene.h" />
-    <ClInclude Include="EngineTest\scene\UITestScene.h" />
-    <ClInclude Include="EngineTest\SceneFactory.h" />
+    <ClInclude Include="MyGame.h" />
+    <ClInclude Include="scene\AnimationTestScene.h" />
+    <ClInclude Include="scene\EngineTestScene.h" />
+    <ClInclude Include="scene\GameScene.h" />
+    <ClInclude Include="scene\InstancingTestScene.h" />
+    <ClInclude Include="scene\LevelTestScene.h" />
+    <ClInclude Include="scene\MaterialTestScene.h" />
+    <ClInclude Include="scene\ObjectTest3DMode.h" />
+    <ClInclude Include="scene\ObjectTest3DObjects.h" />
+    <ClInclude Include="scene\ObjectTestObjects.h" />
+    <ClInclude Include="scene\ObjectTestScene.h" />
+    <ClInclude Include="scene\PathfindTestScene.h" />
+    <ClInclude Include="scene\PhysicsTestScene.h" />
+    <ClInclude Include="scene\PostProcessTestScene.h" />
+    <ClInclude Include="scene\RigidbodyTestScene.h" />
+    <ClInclude Include="scene\SkinningTestScene.h" />
+    <ClInclude Include="scene\Sound3DTestScene.h" />
+    <ClInclude Include="scene\SoundPropagationTestScene.h" />
+    <ClInclude Include="scene\TiledTestScene.h" />
+    <ClInclude Include="scene\TitleScene.h" />
+    <ClInclude Include="scene\TweenTestScene.h" />
+    <ClInclude Include="scene\UITestScene.h" />
+    <ClInclude Include="SceneFactory.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

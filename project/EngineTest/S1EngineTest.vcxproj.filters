@@ -1,0 +1,154 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="EngineTest">
+      <UniqueIdentifier>{ed92ca26-c218-408c-a36b-6bcdc1c912fc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="scene">
+      <UniqueIdentifier>{ea20c079-7eae-4a89-9f3e-4db212c6a042}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp">
+      <Filter>EngineTest</Filter>
+    </ClCompile>
+    <ClCompile Include="MyGame.cpp">
+      <Filter>EngineTest</Filter>
+    </ClCompile>
+    <ClInclude Include="MyGame.h">
+      <Filter>EngineTest</Filter>
+    </ClInclude>
+    <ClCompile Include="scene\AnimationTestScene.cpp">
+      <Filter>scene</Filter>
+    </ClCompile>
+    <ClInclude Include="scene\AnimationTestScene.h">
+      <Filter>scene</Filter>
+    </ClInclude>
+    <ClCompile Include="scene\EngineTestScene.cpp">
+      <Filter>scene</Filter>
+    </ClCompile>
+    <ClInclude Include="scene\EngineTestScene.h">
+      <Filter>scene</Filter>
+    </ClInclude>
+    <ClCompile Include="scene\GameScene.cpp">
+      <Filter>scene</Filter>
+    </ClCompile>
+    <ClInclude Include="scene\GameScene.h">
+      <Filter>scene</Filter>
+    </ClInclude>
+    <ClCompile Include="scene\InstancingTestScene.cpp">
+      <Filter>scene</Filter>
+    </ClCompile>
+    <ClInclude Include="scene\InstancingTestScene.h">
+      <Filter>scene</Filter>
+    </ClInclude>
+    <ClCompile Include="scene\LevelTestScene.cpp">
+      <Filter>scene</Filter>
+    </ClCompile>
+    <ClInclude Include="scene\LevelTestScene.h">
+      <Filter>scene</Filter>
+    </ClInclude>
+    <ClCompile Include="scene\MaterialTestScene.cpp">
+      <Filter>scene</Filter>
+    </ClCompile>
+    <ClInclude Include="scene\MaterialTestScene.h">
+      <Filter>scene</Filter>
+    </ClInclude>
+    <ClCompile Include="scene\ObjectTest3DMode.cpp">
+      <Filter>scene</Filter>
+    </ClCompile>
+    <ClInclude Include="scene\ObjectTest3DMode.h">
+      <Filter>scene</Filter>
+    </ClInclude>
+    <ClCompile Include="scene\ObjectTest3DObjects.cpp">
+      <Filter>scene</Filter>
+    </ClCompile>
+    <ClInclude Include="scene\ObjectTest3DObjects.h">
+      <Filter>scene</Filter>
+    </ClInclude>
+    <ClCompile Include="scene\ObjectTestObjects.cpp">
+      <Filter>scene</Filter>
+    </ClCompile>
+    <ClInclude Include="scene\ObjectTestObjects.h">
+      <Filter>scene</Filter>
+    </ClInclude>
+    <ClCompile Include="scene\ObjectTestScene.cpp">
+      <Filter>scene</Filter>
+    </ClCompile>
+    <ClInclude Include="scene\ObjectTestScene.h">
+      <Filter>scene</Filter>
+    </ClInclude>
+    <ClCompile Include="scene\PathfindTestScene.cpp">
+      <Filter>scene</Filter>
+    </ClCompile>
+    <ClInclude Include="scene\PathfindTestScene.h">
+      <Filter>scene</Filter>
+    </ClInclude>
+    <ClCompile Include="scene\PhysicsTestScene.cpp">
+      <Filter>scene</Filter>
+    </ClCompile>
+    <ClInclude Include="scene\PhysicsTestScene.h">
+      <Filter>scene</Filter>
+    </ClInclude>
+    <ClCompile Include="scene\PostProcessTestScene.cpp">
+      <Filter>scene</Filter>
+    </ClCompile>
+    <ClInclude Include="scene\PostProcessTestScene.h">
+      <Filter>scene</Filter>
+    </ClInclude>
+    <ClCompile Include="scene\RigidbodyTestScene.cpp">
+      <Filter>scene</Filter>
+    </ClCompile>
+    <ClInclude Include="scene\RigidbodyTestScene.h">
+      <Filter>scene</Filter>
+    </ClInclude>
+    <ClCompile Include="scene\SkinningTestScene.cpp">
+      <Filter>scene</Filter>
+    </ClCompile>
+    <ClInclude Include="scene\SkinningTestScene.h">
+      <Filter>scene</Filter>
+    </ClInclude>
+    <ClCompile Include="scene\Sound3DTestScene.cpp">
+      <Filter>scene</Filter>
+    </ClCompile>
+    <ClInclude Include="scene\Sound3DTestScene.h">
+      <Filter>scene</Filter>
+    </ClInclude>
+    <ClCompile Include="scene\SoundPropagationTestScene.cpp">
+      <Filter>scene</Filter>
+    </ClCompile>
+    <ClInclude Include="scene\SoundPropagationTestScene.h">
+      <Filter>scene</Filter>
+    </ClInclude>
+    <ClCompile Include="scene\TiledTestScene.cpp">
+      <Filter>scene</Filter>
+    </ClCompile>
+    <ClInclude Include="scene\TiledTestScene.h">
+      <Filter>scene</Filter>
+    </ClInclude>
+    <ClCompile Include="scene\TitleScene.cpp">
+      <Filter>scene</Filter>
+    </ClCompile>
+    <ClInclude Include="scene\TitleScene.h">
+      <Filter>scene</Filter>
+    </ClInclude>
+    <ClCompile Include="scene\TweenTestScene.cpp">
+      <Filter>scene</Filter>
+    </ClCompile>
+    <ClInclude Include="scene\TweenTestScene.h">
+      <Filter>scene</Filter>
+    </ClInclude>
+    <ClCompile Include="scene\UITestScene.cpp">
+      <Filter>scene</Filter>
+    </ClCompile>
+    <ClInclude Include="scene\UITestScene.h">
+      <Filter>scene</Filter>
+    </ClInclude>
+    <ClCompile Include="SceneFactory.cpp">
+      <Filter>EngineTest</Filter>
+    </ClCompile>
+    <ClInclude Include="SceneFactory.h">
+      <Filter>EngineTest</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

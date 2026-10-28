@@ -32,7 +32,7 @@ void WinApp::Initialize() {
 	//ウィンドウサイズの生成
 	hwnd = CreateWindow(
 		wc.lpszClassName, // ウィンドウクラス名
-		L"DirectX12 Engine", // ウィンドウ名（ゲーム側で変更する場合はSetTitle()を使う）
+		L"S1Engine", // ウィンドウ名（ゲーム側で変更する場合はSetTitle()を使う）
 		WS_OVERLAPPEDWINDOW, // ウィンドウスタイル
 		CW_USEDEFAULT, // x座標
 		CW_USEDEFAULT, // y座標

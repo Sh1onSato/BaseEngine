@@ -1,13 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- エンジンを使うプロジェクトに共通のビルド設定（コンパイルの決まり・インクルードの場所・DirectXTex・DXC の DLL のコピー）。
      使い方（ゲームの vcxproj）:
-       PropertySheets の ImportGroup に <Import Project="（エンジンの project フォルダ）\Engine.props" />
-       Shared の ImportGroup に       <Import Project="（エンジンの project フォルダ）\Engine.vcxitems" Label="Shared" />
+       PropertySheets の ImportGroup に <Import Project="（Engine フォルダ）\Engine.props" />
+       Shared の ImportGroup に       <Import Project="（Engine フォルダ）\Engine.vcxitems" Label="Shared" />
      ゲームの vcxproj には、OutDir / IntDir と、ゲーム自身のファイル・インクルードの場所だけを書けばよい -->
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
-    <!-- エンジンの project フォルダ（このファイルのある所） -->
+    <!-- エンジンのフォルダ（このファイルのある所。ソース・Resources/shaders がある） -->
     <EngineDir>$(MSBuildThisFileDirectory)</EngineDir>
+    <!-- externals（imgui・DirectXTex）のある所 -->
+    <EngineExternalsDir>$(MSBuildThisFileDirectory)..\externals\</EngineExternalsDir>
     <!-- C++ に渡す用（\ を / にする。文字列の中で \ が特別な意味を持たないように） -->
     <EngineDirForCode>$([System.String]::Copy('$(MSBuildThisFileDirectory)').Replace('\','/'))</EngineDirForCode>
   </PropertyGroup>
@@ -19,7 +21,8 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <AdditionalIncludeDirectories>$(EngineDir);$(EngineDir)Engine\2d;$(EngineDir)Engine\ai;$(EngineDir)Engine\3d;$(EngineDir)Engine\audio;$(EngineDir)Engine\base;$(EngineDir)Engine\input;$(EngineDir)Engine\math;$(EngineDir)Engine\object;$(EngineDir)Engine\scene;$(EngineDir)Engine\ui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <!-- $(EngineDir)..\ は "externals/imgui/imgui.h" のように externals から書いた include 用 -->
+      <AdditionalIncludeDirectories>$(EngineDir)..\;$(EngineDir);$(EngineDir)2d;$(EngineDir)ai;$(EngineDir)3d;$(EngineDir)audio;$(EngineDir)base;$(EngineDir)input;$(EngineDir)math;$(EngineDir)object;$(EngineDir)scene;$(EngineDir)ui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <!-- エンジンの場所。ゲームのフォルダにシェーダーが無いとき、ここの Resources から読む（ShaderCompiler） -->
       <PreprocessorDefinitions>ENGINE_ROOT_DIR="$(EngineDirForCode)";_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
@@ -75,7 +78,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
   </ItemDefinitionGroup>
   <ItemGroup>
     <!-- 画像の読み込みに使うライブラリ（エンジンと一緒にビルドする） -->
-    <ProjectReference Include="$(MSBuildThisFileDirectory)externals\DirectXTex\DirectXTex_Desktop_2022_Win10.vcxproj">
+    <ProjectReference Include="$(EngineExternalsDir)DirectXTex\DirectXTex_Desktop_2022_Win10.vcxproj">
       <Project>{371b9fa9-4c90-4ac6-a123-aced756d6c77}</Project>
     </ProjectReference>
   </ItemGroup>

@@ -7,7 +7,7 @@ on:
 
 env:
   # リポジトリのルートディレクトリを基準としたソリューションファイルパス
-  SOLUTION_FILE_PATH: project\CG2_00_01.sln
+  SOLUTION_FILE_PATH: project\S1Engine.sln
   # Visual Studio の構成
   CONFIGURATION: Development
 
