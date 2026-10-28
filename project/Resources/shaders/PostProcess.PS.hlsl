@@ -6,6 +6,7 @@ struct VertexShaderOutput {
 
 Texture2D<float4> gScene : register(t0); // 3D の絵（画面全体のぼかしを掛けたときはぼかした絵）
 Texture2D<float4> gBloom : register(t1); // ぼかした明るい所
+Texture2D<float4> gAmbientOcclusion : register(t2); // 接している所の暗さ（SSAO。1 で暗くしない）
 SamplerState gLinearSampler : register(s0);
 SamplerState gPointSampler : register(s1);
 
@@ -20,7 +21,7 @@ cbuffer CompositeParams : register(b0) {
     float gVignetteRadius;
     float gUsePointFilter; // 1 なら引き伸ばしをくっきり（RenderScaler の kPoint）
     float3 gTint;
-    float gPadding;
+    float gUseAmbientOcclusion; // 1 なら gAmbientOcclusion を掛ける
     float3 gVignetteColor;
     float gAspect; // 絵の幅 / 高さ（ヴィネットを楕円でなく円にする）
 };
@@ -29,6 +30,11 @@ float4 main(VertexShaderOutput input) : SV_TARGET {
     float3 color = (gUsePointFilter > 0.5f)
         ? gScene.Sample(gPointSampler, input.texcoord).rgb
         : gScene.Sample(gLinearSampler, input.texcoord).rgb;
+
+    // 接している所・すき間を暗くする（光を足す前に掛ける）
+    if (gUseAmbientOcclusion > 0.5f) {
+        color *= gAmbientOcclusion.Sample(gLinearSampler, input.texcoord).r;
+    }
 
     // ブルーム（光を足す）
     color += gBloom.Sample(gLinearSampler, input.texcoord).rgb * gBloomIntensity;

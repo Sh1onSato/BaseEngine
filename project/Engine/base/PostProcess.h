@@ -15,6 +15,11 @@ struct PostEffectSettings {
     float bloomIntensity = 1.0f; // 光を足す強さ
     float bloomRadius = 1.5f;    // にじむ広さ（大きいほど広くぼける。内部解像度を変えても画面上の広さは同じ）
 
+    // 接している所を暗くする（SSAO）: 物と床が接する所・すき間・角に周りの光が届きにくいのを表す。「浮いて見える」のを防ぐ
+    bool ambientOcclusionEnabled = false;
+    float ambientOcclusionRadius = 0.5f;    // 調べる範囲（ワールドの長さ。物の大きさの半分くらいまで）
+    float ambientOcclusionIntensity = 1.0f; // 暗くする強さ（0〜2 くらい）
+
     // 画面全体のぼかし（0 で無し。ポーズ画面の背景など。2〜3 で強め。内部解像度を変えても画面上のぼけ方は同じ）
     float blur = 0.0f;
 
@@ -70,8 +75,12 @@ public:
     /// source（width x height の 3D の絵。PIXEL_SHADER_RESOURCE 状態）に効果を掛けて、
     /// 今のメインの描画先（バックバッファの黒帯の内側）に写す。RenderScaler::EndScene が呼ぶ。
     /// usePointFilter: 引き伸ばすときにくっきり（ドット絵向け）にするか
+    /// depthSrvIndex: 3D を描いたときの深度（PIXEL_SHADER_RESOURCE 状態。SSAO に使う。無ければ kNoDepth で SSAO をしない）
     /// </summary>
-    void Render(uint32_t sourceSrvIndex, uint32_t width, uint32_t height, bool usePointFilter);
+    void Render(uint32_t sourceSrvIndex, uint32_t width, uint32_t height, bool usePointFilter, uint32_t depthSrvIndex = kNoDepth);
+    // 今の設定で深度を使うか（RenderScaler が深度を読める状態にするかを決める）
+    bool UsesDepth() const { return settings.ambientOcclusionEnabled && settings.ambientOcclusionIntensity > 0.0f; }
+    static constexpr uint32_t kNoDepth = UINT32_MAX;
 
     // 調整用の ImGui の窓（Debug ビルドで Framework が [F6] のときに呼ぶ）
     void DrawDebugUI();
@@ -91,6 +100,9 @@ private:
         kBloomPong,  // ブルームのぼかしの結果（半分の解像度）
         kBlurPing,   // 画面全体のぼかしの途中（等倍）
         kBlurPong,   // 画面全体のぼかしの結果（等倍）
+        kAo,         // 接している所の暗さ（半分の解像度）
+        kAoPing,     // その ぼかしの途中・結果（ノイズを消す）
+        kAoPong,
         kTargetCount,
     };
 
@@ -115,14 +127,18 @@ private:
     uint32_t sourceWidth = 0;
     uint32_t sourceHeight = 0;
 
-    // ルートシグネチャ（全部の段で共通）: [0] t0 読む絵 [1] t1 2枚目の絵（合成のときのブルーム）[2] b0 定数。s0 なめらか / s1 くっきり
+    // ルートシグネチャ（全部の段で共通）: [0] t0 読む絵 [1] t1 2枚目の絵（合成のときのブルーム）[2] t2 3枚目の絵（合成のときの SSAO）
+    // [3] b0 定数。s0 なめらか / s1 くっきり
     Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature;
     Microsoft::WRL::ComPtr<ID3D12PipelineState> extractPipeline;
     Microsoft::WRL::ComPtr<ID3D12PipelineState> blurPipeline;
     Microsoft::WRL::ComPtr<ID3D12PipelineState> compositePipeline;
+    Microsoft::WRL::ComPtr<ID3D12PipelineState> ambientOcclusionPipeline;
+    static constexpr UINT kRootIndexConstants = 3;
 
-    // 途中の絵の RTV ヒープの番号（RTV: 0〜1 スワップチェーン、2〜6 PostProcess、8 RenderScaler）
+    // 途中の絵の RTV ヒープの番号（RTV: 0〜1 スワップチェーン、2〜6 PostProcess、8 RenderScaler、9〜11 PostProcess の SSAO）
     static constexpr uint32_t kFirstRtvIndex = 2;
+    static constexpr uint32_t kFirstAoRtvIndex = 9;
     // b0 の定数の数（合成の段が一番多い。PostProcess.PS.hlsl の CompositeParams と同じ並び）
     static constexpr uint32_t kRootConstantCount = 16;
 };

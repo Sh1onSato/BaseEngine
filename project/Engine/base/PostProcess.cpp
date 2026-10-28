@@ -1,4 +1,6 @@
 #include "PostProcess.h"
+#include "Camera.h"
+#include "CameraManager.h"
 #include "Logger.h"
 #include "Screen.h"
 #include "ShaderCompiler.h"
@@ -14,6 +16,9 @@ namespace {
     constexpr DXGI_FORMAT kDepthFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
     // ブルームは2回ぼかして広くにじませる
     constexpr int kBloomBlurIterations = 2;
+    // SSAO: 平らな面が自分で暗くならないための差（ワールドの長さ）と、ノイズを消すぼかしの幅（画面のピクセル）
+    constexpr float kAmbientOcclusionBias = 0.03f;
+    constexpr float kAmbientOcclusionBlurRadius = 2.0f;
 
     void Transition(ID3D12GraphicsCommandList* commandList, ID3D12Resource* resource,
                     D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after) {
@@ -28,7 +33,7 @@ namespace {
 }
 
 bool PostEffectSettings::IsActive() const {
-    return (bloomEnabled && bloomIntensity > 0.0f) || blur > 0.0f ||
+    return (bloomEnabled && bloomIntensity > 0.0f) || blur > 0.0f || (ambientOcclusionEnabled && ambientOcclusionIntensity > 0.0f) ||
            brightness != 0.0f || contrast != 1.0f || saturation != 1.0f || sepia > 0.0f ||
            tint.x != 1.0f || tint.y != 1.0f || tint.z != 1.0f || vignetteIntensity > 0.0f;
 }
@@ -38,7 +43,8 @@ void PostProcess::Initialize(DirectXCommon* newDxCommon, SrvManager* newSrvManag
     srvManager = newSrvManager;
 
     for (int i = 0; i < kTargetCount; ++i) {
-        targets[i].rtvIndex = kFirstRtvIndex + static_cast<uint32_t>(i);
+        // SSAO の絵は RenderScaler の番号（8）の後ろに置く
+        targets[i].rtvIndex = i < kAo ? kFirstRtvIndex + static_cast<uint32_t>(i) : kFirstAoRtvIndex + static_cast<uint32_t>(i - kAo);
         targets[i].srvIndex = srvManager->Allocate();
     }
 
@@ -46,6 +52,7 @@ void PostProcess::Initialize(DirectXCommon* newDxCommon, SrvManager* newSrvManag
     extractPipeline = CreatePipeline(L"Resources/shaders/BrightnessExtract.PS.hlsl");
     blurPipeline = CreatePipeline(L"Resources/shaders/GaussianBlur.PS.hlsl");
     compositePipeline = CreatePipeline(L"Resources/shaders/PostProcess.PS.hlsl");
+    ambientOcclusionPipeline = CreatePipeline(L"Resources/shaders/SSAO.PS.hlsl");
 }
 
 void PostProcess::SetDefaultSettings(const PostEffectSettings& newDefault) {
@@ -54,25 +61,26 @@ void PostProcess::SetDefaultSettings(const PostEffectSettings& newDefault) {
 }
 
 void PostProcess::CreateRootSignature() {
-    D3D12_DESCRIPTOR_RANGE ranges[2] = {};
-    for (uint32_t i = 0; i < 2; ++i) {
+    constexpr uint32_t kTextureCount = 3; // t0, t1, t2
+    D3D12_DESCRIPTOR_RANGE ranges[kTextureCount] = {};
+    for (uint32_t i = 0; i < kTextureCount; ++i) {
         ranges[i].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
         ranges[i].NumDescriptors = 1;
-        ranges[i].BaseShaderRegister = i; // t0, t1
+        ranges[i].BaseShaderRegister = i;
         ranges[i].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
     }
-    // t0 と t1 は SRV の番号が続いているとは限らないので、別々のテーブルにする
-    D3D12_ROOT_PARAMETER parameters[3] = {};
-    for (uint32_t i = 0; i < 2; ++i) {
+    // 絵の SRV の番号が続いているとは限らないので、別々のテーブルにする
+    D3D12_ROOT_PARAMETER parameters[kTextureCount + 1] = {};
+    for (uint32_t i = 0; i < kTextureCount; ++i) {
         parameters[i].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
         parameters[i].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
         parameters[i].DescriptorTable.pDescriptorRanges = &ranges[i];
         parameters[i].DescriptorTable.NumDescriptorRanges = 1;
     }
-    parameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-    parameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    parameters[2].Constants.ShaderRegister = 0;
-    parameters[2].Constants.Num32BitValues = kRootConstantCount;
+    parameters[kRootIndexConstants].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+    parameters[kRootIndexConstants].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    parameters[kRootIndexConstants].Constants.ShaderRegister = 0;
+    parameters[kRootIndexConstants].Constants.Num32BitValues = kRootConstantCount;
 
     D3D12_STATIC_SAMPLER_DESC samplers[2] = {};
     const D3D12_FILTER filters[2] = { D3D12_FILTER_MIN_MAG_MIP_LINEAR, D3D12_FILTER_MIN_MAG_MIP_POINT };
@@ -155,6 +163,10 @@ void PostProcess::EnsureTargets(uint32_t width, uint32_t height) {
     CreateTarget(targets[kBloomPong], halfWidth, halfHeight);
     CreateTarget(targets[kBlurPing], width, height);
     CreateTarget(targets[kBlurPong], width, height);
+    // SSAO もぼかすので半分の解像度でよい
+    CreateTarget(targets[kAo], halfWidth, halfHeight);
+    CreateTarget(targets[kAoPing], halfWidth, halfHeight);
+    CreateTarget(targets[kAoPong], halfWidth, halfHeight);
     sourceWidth = width;
     sourceHeight = height;
 }
@@ -202,9 +214,10 @@ void PostProcess::DrawPass(ID3D12PipelineState* pipeline, uint32_t sourceSrvInde
 
     commandList->SetPipelineState(pipeline);
     commandList->SetGraphicsRootDescriptorTable(0, srvManager->GetGPUDescriptorHandle(sourceSrvIndex));
-    // t1 は合成の段しか使わないが、テーブルを空にはできないので同じ絵を入れておく
+    // t1・t2 は合成の段しか使わないが、テーブルを空にはできないので同じ絵を入れておく
     commandList->SetGraphicsRootDescriptorTable(1, srvManager->GetGPUDescriptorHandle(sourceSrvIndex));
-    commandList->SetGraphicsRoot32BitConstants(2, constantCount, constants, 0);
+    commandList->SetGraphicsRootDescriptorTable(2, srvManager->GetGPUDescriptorHandle(sourceSrvIndex));
+    commandList->SetGraphicsRoot32BitConstants(kRootIndexConstants, constantCount, constants, 0);
     commandList->DrawInstanced(3, 1, 0, 0);
 
     Transition(commandList, target.resource.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
@@ -220,7 +233,7 @@ void PostProcess::Blur(uint32_t sourceSrvIndex, Target& ping, Target& result, fl
     DrawPass(blurPipeline.Get(), ping.srvIndex, result, vertical, 2);
 }
 
-void PostProcess::Render(uint32_t sourceSrvIndex, uint32_t width, uint32_t height, bool usePointFilter) {
+void PostProcess::Render(uint32_t sourceSrvIndex, uint32_t width, uint32_t height, bool usePointFilter, uint32_t depthSrvIndex) {
     EnsureTargets(width, height);
     ID3D12GraphicsCommandList* commandList = dxCommon->GetCommandList();
     commandList->SetGraphicsRootSignature(rootSignature.Get());
@@ -241,27 +254,43 @@ void PostProcess::Render(uint32_t sourceSrvIndex, uint32_t width, uint32_t heigh
         }
     }
 
-    // 2. 画面全体のぼかし（等倍）
+    // 2. 接している所の暗さ（SSAO）: 深度から求め（半分の解像度）、ノイズが消えるくらいぼかす
+    const Camera* camera = CameraManager::GetInstance()->GetActiveCamera();
+    const bool useAmbientOcclusion = UsesDepth() && depthSrvIndex != kNoDepth && camera;
+    if (useAmbientOcclusion) {
+        // SSAO.PS.hlsl の AoParams と同じ並び（深度から位置に戻すのに、描いたカメラの投影行列の成分を使う）
+        const Matrix4x4& projection = camera->GetProjectionMatrix();
+        const float aoConstants[10] = {
+            projection.m[0][0], projection.m[1][1], projection.m[2][2], projection.m[3][2],
+            settings.ambientOcclusionRadius, settings.ambientOcclusionIntensity, kAmbientOcclusionBias, 0.0f,
+            1.0f / static_cast<float>(width), 1.0f / static_cast<float>(height),
+        };
+        DrawPass(ambientOcclusionPipeline.Get(), depthSrvIndex, targets[kAo], aoConstants, 10);
+        Blur(targets[kAo].srvIndex, targets[kAoPing], targets[kAoPong], kAmbientOcclusionBlurRadius);
+    }
+
+    // 3. 画面全体のぼかし（等倍）
     uint32_t sceneSrvIndex = sourceSrvIndex;
     if (settings.blur > 0.0f) {
         Blur(sourceSrvIndex, targets[kBlurPing], targets[kBlurPong], settings.blur);
         sceneSrvIndex = targets[kBlurPong].srvIndex;
     }
 
-    // 3. 合成: 画面（黒帯の内側）に、ブルームを足し・色を整え・ヴィネットを掛けて写す
+    // 4. 合成: 画面（黒帯の内側）に、SSAO を掛け・ブルームを足し・色を整え・ヴィネットを掛けて写す
     dxCommon->BindMainRenderTarget();
     const PostEffectSettings& s = settings;
     // PostProcess.PS.hlsl の CompositeParams と同じ並び（float3 は 16 バイトの境目をまたがないように置く）
     const float constants[kRootConstantCount] = {
         useBloom ? s.bloomIntensity : 0.0f, s.brightness, s.contrast, s.saturation,
         s.sepia, s.vignetteIntensity, s.vignetteRadius, usePointFilter ? 1.0f : 0.0f,
-        s.tint.x, s.tint.y, s.tint.z, 0.0f,
+        s.tint.x, s.tint.y, s.tint.z, useAmbientOcclusion ? 1.0f : 0.0f,
         s.vignetteColor.x, s.vignetteColor.y, s.vignetteColor.z, static_cast<float>(width) / static_cast<float>(height),
     };
     commandList->SetPipelineState(compositePipeline.Get());
     commandList->SetGraphicsRootDescriptorTable(0, srvManager->GetGPUDescriptorHandle(sceneSrvIndex));
     commandList->SetGraphicsRootDescriptorTable(1, srvManager->GetGPUDescriptorHandle(targets[kBloomPong].srvIndex));
-    commandList->SetGraphicsRoot32BitConstants(2, kRootConstantCount, constants, 0);
+    commandList->SetGraphicsRootDescriptorTable(2, srvManager->GetGPUDescriptorHandle(targets[kAoPong].srvIndex));
+    commandList->SetGraphicsRoot32BitConstants(kRootIndexConstants, kRootConstantCount, constants, 0);
     commandList->DrawInstanced(3, 1, 0, 0);
 }
 
@@ -275,6 +304,10 @@ void PostProcess::DrawDebugUI() {
     ImGui::SliderFloat("Bloom Threshold", &s.bloomThreshold, 0.0f, 1.0f);
     ImGui::SliderFloat("Bloom Intensity", &s.bloomIntensity, 0.0f, 3.0f);
     ImGui::SliderFloat("Bloom Radius", &s.bloomRadius, 0.0f, 5.0f);
+    ImGui::Separator();
+    ImGui::Checkbox("Ambient Occlusion", &s.ambientOcclusionEnabled);
+    ImGui::SliderFloat("AO Radius", &s.ambientOcclusionRadius, 0.05f, 3.0f);
+    ImGui::SliderFloat("AO Intensity", &s.ambientOcclusionIntensity, 0.0f, 2.0f);
     ImGui::Separator();
     ImGui::SliderFloat("Blur", &s.blur, 0.0f, 5.0f);
     ImGui::Separator();

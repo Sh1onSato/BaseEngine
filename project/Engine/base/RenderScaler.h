@@ -78,6 +78,8 @@ private:
     uint32_t targetWidth = 0;
     uint32_t targetHeight = 0;
     uint32_t srvIndex = 0;
+    // 深度を絵として読む SRV（画面の効果の SSAO が使う）
+    uint32_t depthSrvIndex = 0;
 
     Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature;
     Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState;

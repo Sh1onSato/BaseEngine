@@ -75,7 +75,9 @@ void Object3dCommon::Initialize(DirectXCommon* dxCommon, SrvManager* srvManager)
     shadowDataResource = dxCommon->CreatBufferResource(sizeof(ShadowData));
     CheckHResult(shadowDataResource->Map(0, nullptr, reinterpret_cast<void**>(&shadowData)), "Object3dCommon: Map shadowDataResource");
     shadowData->lightViewProjection = Calculation::MakeIdentity4x4();
-    shadowData->bias = 0.0025f;
+    // 影のずらし（ライトから見た奥行き 0〜1 の単位。奥行きの範囲が約 80 なので 0.0005 ≒ 0.04）。
+    // 大きいと影が物の根元から離れて浮いて見え、小さすぎると面に縞模様（シャドウアクネ）が出る
+    shadowData->bias = 0.0005f;
     shadowData->orthoExtentWorld = shadowOrthoExtent;
     shadowData->orthoDepthRangeWorld = shadowFarClip - shadowNearClip;
 

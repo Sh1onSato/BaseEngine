@@ -9,6 +9,8 @@ namespace {
     // 3D の描画先の色の形式（Object3d などの PSO の RTVFormats と同じにする）
     constexpr DXGI_FORMAT kColorFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
     constexpr DXGI_FORMAT kDepthFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    // 深度を絵として読むときの形式（深度の 24 ビットだけ読む）
+    constexpr DXGI_FORMAT kDepthReadFormat = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
 
     void Transition(ID3D12GraphicsCommandList* commandList, ID3D12Resource* resource,
                     D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after) {
@@ -26,6 +28,7 @@ void RenderScaler::Initialize(DirectXCommon* dxCommon, SrvManager* srvManager) {
     this->dxCommon = dxCommon;
     this->srvManager = srvManager;
     srvIndex = srvManager->Allocate();
+    depthSrvIndex = srvManager->Allocate();
     CreatePipeline();
 }
 
@@ -144,7 +147,23 @@ void RenderScaler::EnsureTarget(uint32_t width, uint32_t height) {
     device->CreateRenderTargetView(colorResource.Get(), &rtvDesc, dxCommon->GetRtvHandle(kRtvIndex));
     srvManager->CreateSRVForTexture2D(srvIndex, colorResource.Get(), kColorFormat, 1);
 
-    depthResource = dxCommon->CreateDepthStencilTexureResource(static_cast<int32_t>(width), static_cast<int32_t>(height));
+    // 深度: 画面の効果（SSAO）で絵として読めるよう、形式を決めずに作り（TYPELESS）、深度として書く・数値として読むの両方の見方を作る
+    D3D12_RESOURCE_DESC depthDesc{};
+    depthDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    depthDesc.Width = width;
+    depthDesc.Height = height;
+    depthDesc.DepthOrArraySize = 1;
+    depthDesc.MipLevels = 1;
+    depthDesc.Format = DXGI_FORMAT_R24G8_TYPELESS;
+    depthDesc.SampleDesc.Count = 1;
+    depthDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+    D3D12_CLEAR_VALUE depthClearValue{};
+    depthClearValue.Format = kDepthFormat;
+    depthClearValue.DepthStencil.Depth = 1.0f;
+    hr = device->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAG_NONE, &depthDesc, D3D12_RESOURCE_STATE_DEPTH_WRITE,
+                                         &depthClearValue, IID_PPV_ARGS(&depthResource));
+    Logger::CheckHResult(hr, "RenderScaler: CreateCommittedResource(depth)");
+    srvManager->CreateSRVForTexture2D(depthSrvIndex, depthResource.Get(), kDepthReadFormat, 1);
     D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
     dsvDesc.Format = kDepthFormat;
     dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
@@ -200,8 +219,15 @@ void RenderScaler::EndScene() {
     // バックバッファのゲームの絵の範囲（黒帯の内側）に引き伸ばして描く
     dxCommon->ResetMainRenderTarget();
     if (postProcess && postProcess->IsActive()) {
-        // 画面の効果を掛けながら写す（引き伸ばしも PostProcess の最後の段で行う）
-        postProcess->Render(srvIndex, renderWidth, renderHeight, filter == Filter::kPoint);
+        // 画面の効果を掛けながら写す（引き伸ばしも PostProcess の最後の段で行う）。SSAO を使うなら深度を絵として読める状態にする
+        const bool usesDepth = postProcess->UsesDepth();
+        if (usesDepth) {
+            Transition(commandList, depthResource.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        }
+        postProcess->Render(srvIndex, renderWidth, renderHeight, filter == Filter::kPoint, usesDepth ? depthSrvIndex : PostProcess::kNoDepth);
+        if (usesDepth) {
+            Transition(commandList, depthResource.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+        }
         return;
     }
     commandList->SetGraphicsRootSignature(rootSignature.Get());

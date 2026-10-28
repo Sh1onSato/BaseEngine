@@ -61,6 +61,8 @@ void MaterialTestScene::Initialize() {
     settings.bloomEnabled = true;
     settings.bloomThreshold = 1.0f; // 1 を超える明るさ（光る球）だけにじませる
     settings.bloomIntensity = 1.0f;
+    // 物が床に接している所・すき間を暗くする（浮いて見えないように）
+    settings.ambientOcclusionEnabled = true;
 }
 
 void MaterialTestScene::SetupCamera() {
@@ -86,8 +88,8 @@ void MaterialTestScene::InitializeTexts() {
 
     helpText = std::make_unique<Text>();
     helpText->Initialize(spriteCommon, 18.0f);
-    helpText->SetText("左の球: 横 = 金属らしさ 0 → 1、縦 = 粗さ 0.1 / 0.5 / 0.9   右: 法線マップの板・立方体・球 / 金属・粗さの画像の立方体（左ざらざら・右つるつるの金属）/ 光る球\n"
-                      "[N] 法線マップ ON/OFF  [P] 金属・粗さを使う当たり方 ON/OFF（OFF = 今までの簡単な当たり方）");
+    helpText->SetText("左の球: 横 = 金属らしさ 0 → 1、縦 = 粗さ 0.1 / 0.5 / 0.9   右: 法線マップの板・立方体・球 / 金属・粗さの画像の立方体（市松模様: ざらざら ⇔ つるつるの金属）/ 光る球\n"
+                      "[N] 法線マップ ON/OFF  [P] 金属・粗さを使う当たり方 ON/OFF（OFF = 今までの簡単な当たり方）  [O] 接している所を暗くする（SSAO）ON/OFF");
     helpText->SetLayer(kUiLayer);
 
     statusText = std::make_unique<Text>();
@@ -145,16 +147,16 @@ void MaterialTestScene::SetupNormalMapObjects() {
 
 void MaterialTestScene::SetupOtherObjects() {
     DirectXCommon* dxCommon = Framework::GetInstance()->GetDxCommon();
-    // 金属・粗さの画像（左半分 = ざらざらで金属でない、右半分 = つるつるの金属）
+    // 金属・粗さの画像（市松模様: ざらざらで金属でない マス と つるつるの金属 のマスが交互）
     metallicRoughnessCubeModel = std::make_shared<Model>();
     metallicRoughnessCubeModel->InitializeFromVertices(dxCommon, PrimitiveMesh::BuildCube());
     metallicRoughnessCubeModel->SetMetallic(1.0f);
     metallicRoughnessCubeModel->SetRoughness(1.0f);
     metallicRoughnessCubeModel->SetMetallicRoughnessMap(kMetallicRoughnessPath);
-    objects.push_back(CreateObject(metallicRoughnessCubeModel, { 3.0f, 0.9f, -1.5f }, { 1.6f, 1.6f, 1.6f }, { 0.9f, 0.9f, 0.95f, 1.0f }));
+    objects.push_back(CreateObject(metallicRoughnessCubeModel, { 3.0f, 0.8f, -1.5f }, { 1.6f, 1.6f, 1.6f }, { 0.9f, 0.9f, 0.95f, 1.0f }));
 
     // 光る球（物ごとの発光。強さ 1 を超えるとブルームでにじむ）
-    std::unique_ptr<Object3d> glow = CreateObject(ModelManager::GetInstance()->GetSphereModel(), { 6.5f, 0.9f, -1.5f }, { 1.2f, 1.2f, 1.2f },
+    std::unique_ptr<Object3d> glow = CreateObject(ModelManager::GetInstance()->GetSphereModel(), { 6.5f, 0.6f, -1.5f }, { 1.2f, 1.2f, 1.2f },
                                                   { 0.2f, 0.1f, 0.05f, 1.0f });
     glow->SetEmissive({ 1.0f, 0.5f, 0.15f }, 4.0f);
     objects.push_back(std::move(glow));
@@ -203,6 +205,10 @@ void MaterialTestScene::UpdateInput() {
         normalCubeModel->GetSurfaceMaterial(0).normalStrength = isNormalMapOn ? 1.0f : 0.0f;
         normalSphereModel->GetSurfaceMaterial(0).normalStrength = isNormalMapOn ? 0.6f : 0.0f;
     }
+    if (input->TriggerKey(DIK_O)) {
+        PostEffectSettings& settings = Framework::GetInstance()->GetPostProcess()->GetSettings();
+        settings.ambientOcclusionEnabled = !settings.ambientOcclusionEnabled;
+    }
     if (input->TriggerKey(DIK_P)) {
         isPhysicalOn = !isPhysicalOn;
         // 床（最後に作った物）は今までの当たり方のまま
@@ -239,5 +245,7 @@ void MaterialTestScene::DrawShadowPass() {
 }
 
 std::string MaterialTestScene::BuildStatusText() const {
-    return std::format("法線マップ {}  金属・粗さを使う当たり方 {}", isNormalMapOn ? "ON" : "OFF", isPhysicalOn ? "ON" : "OFF（今までの当たり方）");
+    const bool isAmbientOcclusionOn = Framework::GetInstance()->GetPostProcess()->GetSettings().ambientOcclusionEnabled;
+    return std::format("法線マップ {}  金属・粗さを使う当たり方 {}  SSAO {}", isNormalMapOn ? "ON" : "OFF", isPhysicalOn ? "ON" : "OFF（今までの当たり方）",
+                       isAmbientOcclusionOn ? "ON" : "OFF");
 }
