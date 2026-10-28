@@ -37,6 +37,9 @@ public:
     // materialIndex のマテリアルの画像を TextureManager に読み込み、その名前を返す（Model の textureFilePath に渡す）。
     // 画像が無ければ基本色の 1x1 の画像を作る。マテリアルが無ければ "white"
     static std::string LoadMaterialTexture(const GltfModelData& data, int32_t materialIndex);
+    // imageIndex の画像を TextureManager に読み込み、その名前を返す（無ければ空）。
+    // isData: 法線マップ・金属/粗さなど数値の画像（色の補正をしない LoadDataTexture で読む）
+    static std::string LoadImageTexture(const GltfModelData& data, int32_t imageIndex, bool isData);
 
     // ノードのレストポーズのワールド行列（親をたどって掛ける）。nodeIndex が -1 なら単位行列
     static Matrix4x4 ComputeNodeWorldMatrix(const std::vector<GltfNode>& nodes, int32_t nodeIndex);

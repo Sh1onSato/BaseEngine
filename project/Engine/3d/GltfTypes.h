@@ -111,13 +111,25 @@ struct GltfImage {
     std::vector<uint8_t> data;
 };
 
-// glTF のマテリアル（今は基本色だけ。光沢・法線マップなどは読まない）
+// glTF のマテリアル（金属・粗さ・法線マップ・発光・影になりやすい所。値の既定は glTF の決まりどおり）
 struct GltfMaterial {
     std::string name;
     // 基本色（画像が無いときはこの色で塗る。画像があるときは画像だけを使い、この色は掛けない）
     Vector4 baseColorFactor = { 1.0f, 1.0f, 1.0f, 1.0f };
     // images の番号（-1 なら画像なし）
     int32_t imageIndex = -1;
+    // 金属らしさ・粗さ（pbrMetallicRoughness が無いマテリアルは、金属でない 0 にする）
+    float metallicFactor = 1.0f;
+    float roughnessFactor = 1.0f;
+    // 発光（KHR_materials_emissive_strength の強さを掛けてある）
+    Vector3 emissiveFactor = { 0.0f, 0.0f, 0.0f };
+    float normalScale = 1.0f;
+    float occlusionStrength = 1.0f;
+    // 画像の images の番号（-1 なら無し）
+    int32_t metallicRoughnessImageIndex = -1;
+    int32_t normalImageIndex = -1;
+    int32_t emissiveImageIndex = -1;
+    int32_t occlusionImageIndex = -1;
 };
 
 // GltfLoader::LoadGltfFile()の戻り値。glTFファイル1つ分の中間データをまとめたもの。

@@ -607,29 +607,84 @@ std::vector<GltfImage> GltfLoader::ParseImages(const JsonValue& gltf, const std:
     return images;
 }
 
-// materials の基本色（pbrMetallicRoughness.baseColorFactor / baseColorTexture）を読む
+// materials を読む（基本色・金属/粗さ・法線マップ・発光・影になりやすい所）
 std::vector<GltfMaterial> GltfLoader::ParseMaterials(const JsonValue& gltf) {
     std::vector<GltfMaterial> materials;
     if (!gltf.Contains("materials")) return materials;
+    // { "index": テクスチャ番号 } の画像（images の番号。無ければ -1）
+    auto imageOf = [&gltf](const JsonValue& textureInfo) {
+        const size_t textureIndex = (size_t)textureInfo["index"].AsNumber();
+        if (!gltf.Contains("textures") || textureIndex >= gltf["textures"].Size()) return -1;
+        const JsonValue& texture = gltf["textures"][textureIndex];
+        return texture.Contains("source") ? (int32_t)texture["source"].AsNumber() : -1;
+    };
     const JsonValue& materialsJson = gltf["materials"];
     materials.resize(materialsJson.Size());
     for (size_t i = 0; i < materialsJson.Size(); ++i) {
         const JsonValue& materialJson = materialsJson[i];
         GltfMaterial& material = materials[i];
         if (materialJson.Contains("name")) material.name = materialJson["name"].AsString();
-        const JsonValue& pbr = materialJson["pbrMetallicRoughness"];
-        if (pbr.Contains("baseColorFactor")) {
-            const JsonValue& f = pbr["baseColorFactor"];
-            material.baseColorFactor = { (float)f[(size_t)0].AsNumber(), (float)f[(size_t)1].AsNumber(), (float)f[(size_t)2].AsNumber(), (float)f[(size_t)3].AsNumber() };
+        if (materialJson.Contains("pbrMetallicRoughness")) {
+            const JsonValue& pbr = materialJson["pbrMetallicRoughness"];
+            if (pbr.Contains("baseColorFactor")) {
+                const JsonValue& f = pbr["baseColorFactor"];
+                material.baseColorFactor = { (float)f[(size_t)0].AsNumber(), (float)f[(size_t)1].AsNumber(), (float)f[(size_t)2].AsNumber(), (float)f[(size_t)3].AsNumber() };
+            }
+            if (pbr.Contains("baseColorTexture")) material.imageIndex = imageOf(pbr["baseColorTexture"]);
+            if (pbr.Contains("metallicFactor")) material.metallicFactor = (float)pbr["metallicFactor"].AsNumber();
+            if (pbr.Contains("roughnessFactor")) material.roughnessFactor = (float)pbr["roughnessFactor"].AsNumber();
+            if (pbr.Contains("metallicRoughnessTexture")) material.metallicRoughnessImageIndex = imageOf(pbr["metallicRoughnessTexture"]);
+        } else {
+            // 決まりでは金属 1 だが、書かれていないのは「色だけのマテリアル」がほとんどなので、金属でない物にする
+            material.metallicFactor = 0.0f;
         }
-        if (pbr.Contains("baseColorTexture")) {
-            const JsonValue& texture = gltf["textures"][(size_t)pbr["baseColorTexture"]["index"].AsNumber()];
-            if (texture.Contains("source")) {
-                material.imageIndex = (int32_t)texture["source"].AsNumber();
+        if (materialJson.Contains("normalTexture")) {
+            const JsonValue& normal = materialJson["normalTexture"];
+            material.normalImageIndex = imageOf(normal);
+            if (normal.Contains("scale")) material.normalScale = (float)normal["scale"].AsNumber();
+        }
+        if (materialJson.Contains("occlusionTexture")) {
+            const JsonValue& occlusion = materialJson["occlusionTexture"];
+            material.occlusionImageIndex = imageOf(occlusion);
+            if (occlusion.Contains("strength")) material.occlusionStrength = (float)occlusion["strength"].AsNumber();
+        }
+        if (materialJson.Contains("emissiveTexture")) material.emissiveImageIndex = imageOf(materialJson["emissiveTexture"]);
+        if (materialJson.Contains("emissiveFactor")) {
+            const JsonValue& f = materialJson["emissiveFactor"];
+            material.emissiveFactor = { (float)f[(size_t)0].AsNumber(), (float)f[(size_t)1].AsNumber(), (float)f[(size_t)2].AsNumber() };
+        }
+        // 発光の強さ（1 を超える明るさ。Blender の Emission Strength）
+        if (materialJson.Contains("extensions") && materialJson["extensions"].Contains("KHR_materials_emissive_strength")) {
+            const JsonValue& strength = materialJson["extensions"]["KHR_materials_emissive_strength"];
+            if (strength.Contains("emissiveStrength")) {
+                material.emissiveFactor = material.emissiveFactor * (float)strength["emissiveStrength"].AsNumber();
             }
         }
     }
     return materials;
+}
+
+std::string GltfLoader::LoadImageTexture(const GltfModelData& data, int32_t imageIndex, bool isData) {
+    if (imageIndex < 0 || (size_t)imageIndex >= data.images.size()) {
+        return "";
+    }
+    const GltfImage& image = data.images[(size_t)imageIndex];
+    TextureManager* textureManager = TextureManager::GetInstance();
+    if (!image.filePath.empty()) {
+        if (isData) {
+            return textureManager->LoadDataTexture(image.filePath);
+        }
+        textureManager->LoadTexture(image.filePath);
+        return image.filePath;
+    }
+    if (!image.data.empty()) {
+        if (isData) {
+            return textureManager->LoadDataTextureFromMemory(image.name, image.data.data(), image.data.size());
+        }
+        textureManager->LoadTextureFromMemory(image.name, image.data.data(), image.data.size());
+        return image.name;
+    }
+    return "";
 }
 
 std::string GltfLoader::LoadMaterialTexture(const GltfModelData& data, int32_t materialIndex) {

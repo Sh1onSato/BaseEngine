@@ -33,12 +33,32 @@ public:
     const Vector4& GetColor() const { return materialData->color; }
     void SetEnableLighting(bool enable) { materialData->enableLighting = enable ? 1 : 0; }
 
+    // --- この物だけの材質（モデルの材質より優先。同じモデルを使う他の物には効かない） ---
+    // 自分で光る（強さ 1 を超えると画面の効果のブルームで光って見える。被弾で一瞬光らせる・光る弾など）。0 で消す
+    void SetEmissive(const Vector3& color, float intensity = 1.0f) {
+        materialData->emissive = { color.x * intensity, color.y * intensity, color.z * intensity, 0.0f };
+    }
+    // 金属らしさ（0〜1）・粗さ（0 = つるつる 〜 1 = ざらざら）。呼ぶと金属・粗さを使う当たり方になる。-1 でモデルの値に戻す
+    void SetMetallic(float metallic) { materialData->metallicOverride = metallic; UsePhysicalLightingIfOverridden(); }
+    void SetRoughness(float roughness) { materialData->roughnessOverride = roughness; UsePhysicalLightingIfOverridden(); }
+    // 光の当たり方を決める（true = 金属・粗さを使う、false = 今までの簡単な当たり方）。ClearLightingModel でモデルの設定に戻す
+    void SetPhysicalLighting(bool enable) { materialData->lightingModelOverride = enable ? 1 : 0; }
+    void ClearLightingModel() { materialData->lightingModelOverride = -1; }
+
     // Getter
     const Transform& GetTransform() const { return transform; }
     // Update で計算したワールド行列
     const Matrix4x4& GetWorldMatrix() const { return worldMatrix; }
 
 private:
+    // 金属・粗さを自分で決めたなら、その当たり方にする（決めていなければモデルの設定のまま）
+    void UsePhysicalLightingIfOverridden() {
+        const bool isOverridden = materialData->metallicOverride >= 0.0f || materialData->roughnessOverride >= 0.0f;
+        if (isOverridden && materialData->lightingModelOverride < 0) {
+            materialData->lightingModelOverride = 1;
+        }
+    }
+
     Object3dCommon* common = nullptr;
     // 描画に使うモデル
     Model* model = nullptr;

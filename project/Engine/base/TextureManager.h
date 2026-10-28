@@ -118,6 +118,10 @@ public:
 	// 画像ファイルの中身（png・jpg などのバイト列）から読み込む（glTF の中に入っている画像用）。
 	// name は他と重ならない名前にする（Acquire でこの名前を使う）。読み込み済みなら何もしない
 	void LoadTextureFromMemory(const std::string& name, const uint8_t* data, size_t size);
+	// 法線マップ・金属/粗さの画像など「色ではなく数値」の画像を読み込む（色の画像と違い、明るさの補正 = sRGB の変換をしない）。
+	// 同じファイルを色の画像としても読めるよう、登録名は別（戻り値。Acquire にはこの名前を使う）
+	std::string LoadDataTexture(const std::string& filePath);
+	std::string LoadDataTextureFromMemory(const std::string& name, const uint8_t* data, size_t size);
 
 	/// <summary>
 	/// 1x1の白いテクスチャを内部で生成する
@@ -204,7 +208,7 @@ private:
 	// 名前の画像の場所を確保して SRV 番号を取る（中身は呼んだ側が作る）
 	uint32_t AllocateSlot(const std::string& name);
 	// 読み込んだ画像に（DDS 以外は）ミップマップを作り、GPU に送って name で登録する
-	void RegisterImage(const std::string& name, DirectX::ScratchImage& image, bool isDds);
+	void RegisterImage(const std::string& name, DirectX::ScratchImage& image, bool isDds, bool isData = false);
 	// 見つからなければ kNotFound
 	static constexpr uint32_t kNotFound = UINT32_MAX;
 	uint32_t FindIndex(const std::string& filePath) const;

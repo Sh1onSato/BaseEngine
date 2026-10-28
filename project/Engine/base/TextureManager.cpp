@@ -215,13 +215,56 @@ void TextureManager::LoadTextureFromMemory(const std::string& name, const uint8_
 	RegisterImage(name, image, false);
 }
 
-void TextureManager::RegisterImage(const std::string& name, DirectX::ScratchImage& image, bool isDds) {
+namespace {
+	// 数値の画像（LoadDataTexture）の登録名。色の画像として読んだ同じファイルと分ける
+	std::string MakeDataTextureName(const std::string& name) {
+		return name + "#data";
+	}
+}
+
+std::string TextureManager::LoadDataTexture(const std::string& filePath) {
+	const std::string name = MakeDataTextureName(filePath);
+	if (uint32_t found = FindIndex(name); found != kNotFound) {
+		textureDatas[found].sceneSerial = currentSceneSerial;
+		return name;
+	}
+	DirectX::ScratchImage image{};
+	std::wstring filePathW = ConvertString(filePath);
+	const bool isDds = filePath.find(".dds") != std::string::npos;
+	HRESULT hr;
+	if (isDds) {
+		hr = DirectX::LoadFromDDSFile(filePathW.c_str(), DirectX::DDS_FLAGS_NONE, nullptr, image);
+	} else {
+		// 画像に「sRGB です」と書かれていても無視して、そのままの数値で読む
+		hr = DirectX::LoadFromWICFile(filePathW.c_str(), DirectX::WIC_FLAGS_IGNORE_SRGB, nullptr, image);
+	}
+	Logger::CheckHResult(hr, "TextureManager: Load data texture file(" + filePath + ")");
+	RegisterImage(name, image, isDds, true);
+	return name;
+}
+
+std::string TextureManager::LoadDataTextureFromMemory(const std::string& name, const uint8_t* data, size_t size) {
+	const std::string dataName = MakeDataTextureName(name);
+	if (uint32_t found = FindIndex(dataName); found != kNotFound) {
+		textureDatas[found].sceneSerial = currentSceneSerial;
+		return dataName;
+	}
+	DirectX::ScratchImage image{};
+	HRESULT hr = DirectX::LoadFromWICMemory(data, size, DirectX::WIC_FLAGS_IGNORE_SRGB, nullptr, image);
+	Logger::CheckHResult(hr, "TextureManager: Load data texture from memory(" + name + ")");
+	RegisterImage(dataName, image, false, true);
+	return dataName;
+}
+
+void TextureManager::RegisterImage(const std::string& name, DirectX::ScratchImage& image, bool isDds, bool isData) {
 	// ミニマップの作成（DDSの場合は既に含まれていることが多いのでチェック）
 	DirectX::ScratchImage mipChain{};
 	if (DirectX::IsCompressed(image.GetMetadata().format) || isDds) {
 		mipChain = std::move(image);
 	} else {
-		HRESULT hr = DirectX::GenerateMipMaps(image.GetImages(), image.GetImageCount(), image.GetMetadata(), DirectX::TEX_FILTER_SRGB, 0, mipChain);
+		// 数値の画像は数値のまま平均する（色の画像は明るさの補正を考えて平均する）
+		const DirectX::TEX_FILTER_FLAGS filter = isData ? DirectX::TEX_FILTER_DEFAULT : DirectX::TEX_FILTER_SRGB;
+		HRESULT hr = DirectX::GenerateMipMaps(image.GetImages(), image.GetImageCount(), image.GetMetadata(), filter, 0, mipChain);
 		Logger::CheckHResult(hr, "TextureManager: GenerateMipMaps(" + name + ")");
 	}
 

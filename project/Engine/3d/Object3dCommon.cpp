@@ -1,4 +1,6 @@
 #include "Object3dCommon.h"
+#include "Camera.h"
+#include "CameraManager.h"
 #include "ShaderCompiler.h"
 #include "Logger.h"
 #include <cmath>
@@ -20,6 +22,11 @@ void Object3dCommon::Initialize(DirectXCommon* dxCommon, SrvManager* srvManager)
 	CreateRootSignature();
 	// 2. パイプラインの作成
 	CreateGraphicsPipeline();
+
+    // カメラの位置用のリソース（照り返しの計算に使う。PreDraw で書く）
+    cameraResource = dxCommon->CreatBufferResource(sizeof(CameraForGPU));
+    CheckHResult(cameraResource->Map(0, nullptr, reinterpret_cast<void**>(&cameraData)), "Object3dCommon: Map cameraResource");
+    *cameraData = { { 0.0f, 0.0f, 0.0f }, 0.0f };
 
     // DirectionalLight用のリソース
     directionalLightResource = dxCommon->CreatBufferResource(sizeof(DirectionalLight));
@@ -91,7 +98,7 @@ void Object3dCommon::Initialize(DirectXCommon* dxCommon, SrvManager* srvManager)
 }
 
 void Object3dCommon::CreateRootSignature() {
-    D3D12_ROOT_PARAMETER rootParameters[10] = {};
+    D3D12_ROOT_PARAMETER rootParameters[kRootParameterCount] = {};
 
     // CBV: Material (b0)
     rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -158,6 +165,29 @@ void Object3dCommon::CreateRootSignature() {
     rootParameters[kRootIndexInstances].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
     rootParameters[kRootIndexInstances].Descriptor.ShaderRegister = 3; // t3
     rootParameters[kRootIndexInstances].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+
+    // ここから材質（法線マップなど）。既存のインデックスを変えないよう末尾に追加している
+    // CBV: モデルの部分ごとの材質 (b6。Model::Draw が部分ごとにセット)
+    rootParameters[kRootIndexSurfaceMaterial].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[kRootIndexSurfaceMaterial].Descriptor.ShaderRegister = 6;
+    rootParameters[kRootIndexSurfaceMaterial].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    // DescriptorTable: 法線マップ・金属/粗さ・発光・影の画像 (t4〜t7。1枚ずつ別の表。画像は SRV ヒープの離れた所にあるため)
+    D3D12_DESCRIPTOR_RANGE materialTextureRanges[kMaterialTextureCount] = {};
+    for (UINT i = 0; i < kMaterialTextureCount; ++i) {
+        materialTextureRanges[i].BaseShaderRegister = 4 + i;
+        materialTextureRanges[i].NumDescriptors = 1;
+        materialTextureRanges[i].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+        materialTextureRanges[i].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+        D3D12_ROOT_PARAMETER& parameter = rootParameters[kRootIndexMaterialTextures + i];
+        parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        parameter.DescriptorTable.NumDescriptorRanges = 1;
+        parameter.DescriptorTable.pDescriptorRanges = &materialTextureRanges[i];
+        parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    }
+    // CBV: カメラの位置 (b7。照り返しの計算用。PreDraw でセット)
+    rootParameters[kRootIndexCamera].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    rootParameters[kRootIndexCamera].Descriptor.ShaderRegister = 7;
+    rootParameters[kRootIndexCamera].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
     D3D12_ROOT_SIGNATURE_DESC descriptionRootSignature = {};
     descriptionRootSignature.pParameters = rootParameters;
@@ -413,6 +443,13 @@ void Object3dCommon::PreDraw(Object3dBlendMode blendMode) {
     // 定数バッファのセット（ShadowData / ShadowMap）
     commandList->SetGraphicsRootConstantBufferView(6, shadowDataResource->GetGPUVirtualAddress());
     commandList->SetGraphicsRootDescriptorTable(7, srvManager->GetGPUDescriptorHandle(shadowMapSrvIndex));
+
+    // カメラの位置（揺れも含めた、実際に描いているカメラの位置 = ビュー行列の逆の平行移動）
+    if (const Camera* camera = CameraManager::GetInstance()->GetActiveCamera()) {
+        const Matrix4x4 cameraWorld = Calculation::Inverse(camera->GetViewMatrix());
+        cameraData->worldPosition = { cameraWorld.m[3][0], cameraWorld.m[3][1], cameraWorld.m[3][2] };
+    }
+    commandList->SetGraphicsRootConstantBufferView(kRootIndexCamera, cameraResource->GetGPUVirtualAddress());
 }
 
 void Object3dCommon::UpdateLightViewProjection() {

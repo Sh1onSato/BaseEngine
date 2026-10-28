@@ -1,9 +1,12 @@
 #include "Model.h"
 #include "GltfLoader.h"
 #include "Logger.h"
+#include "Object3dCommon.h"
+#include <algorithm>
 #include <fstream>
 
 void Model::Initialize(DirectXCommon* dxCommon, const std::string& directoryPath, const std::string& filename) {
+	this->dxCommon = dxCommon;
 	// 1. ファイルを読み込む
 	modelData = LoadObjFile(directoryPath, filename);
 	if (modelData.material.textureFilePath.size() > 0) {
@@ -12,11 +15,14 @@ void Model::Initialize(DirectXCommon* dxCommon, const std::string& directoryPath
 		modelData.material.textureFilePath = "white"; // mtl に画像が無ければ白（色は Object3d::SetColor で付ける）
 	}
 	SetSingleSubMesh(modelData.material.textureFilePath);
+	// .mtl に書かれた法線マップ・発光・金属/粗さ
+	ApplyMaterialData(modelData.material);
 
 	CreateVertexBuffer(dxCommon);
 }
 
 void Model::InitializeFromVertices(DirectXCommon* dxCommon, const std::vector<VertexData>& vertices, const std::string& textureFilePath) {
+	this->dxCommon = dxCommon;
 	modelData.vertices = vertices;
 	modelData.material.textureFilePath = textureFilePath.empty() ? "white" : textureFilePath;
 	// 画像は読み込まない（読み込み済みの物を使う）
@@ -26,6 +32,7 @@ void Model::InitializeFromVertices(DirectXCommon* dxCommon, const std::vector<Ve
 }
 
 void Model::InitializeFromGltf(DirectXCommon* dxCommon, const GltfModelData& data, bool keepSkinning) {
+	this->dxCommon = dxCommon;
 	modelData.vertices.clear();
 	subMeshes.clear();
 	morphParts.clear();
@@ -35,6 +42,8 @@ void Model::InitializeFromGltf(DirectXCommon* dxCommon, const GltfModelData& dat
 		subMesh.vertexCount = static_cast<uint32_t>(primitive.vertices.size());
 		// マテリアルの画像（無ければ色の画像か白）を読み込んで使う
 		subMesh.texture = TextureManager::GetInstance()->Acquire(GltfLoader::LoadMaterialTexture(data, primitive.materialIndex));
+		InitializeSurface(subMesh);
+		ApplyGltfMaterial(subMesh, data, primitive.materialIndex);
 
 		std::vector<VertexData> vertices = primitive.vertices;
 		if (!primitive.isSkinned && keepSkinning && primitive.rigidSlot >= 0) {
@@ -73,6 +82,7 @@ void Model::SetSingleSubMesh(const std::string& textureFilePath) {
 	SubMesh subMesh;
 	subMesh.vertexCount = static_cast<uint32_t>(modelData.vertices.size());
 	subMesh.texture = TextureManager::GetInstance()->Acquire(textureFilePath);
+	InitializeSurface(subMesh);
 	subMeshes.push_back(std::move(subMesh));
 }
 
@@ -111,9 +121,15 @@ void Model::ApplyMorphWeights(int32_t nodeIndex, const std::vector<float>& weigh
 void Model::Draw(ID3D12GraphicsCommandList* commandList, UINT instanceCount) {
 	// 描画コマンドの発行
 	commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
-	// 部分ごとに画像を切り替えて描く
+	// 部分ごとに画像・材質を切り替えて描く
+	TextureManager* textureManager = TextureManager::GetInstance();
 	for (const SubMesh& subMesh : subMeshes) {
-		commandList->SetGraphicsRootDescriptorTable(2, TextureManager::GetInstance()->GetSrvHandleGPU(subMesh.texture.GetIndex()));
+		commandList->SetGraphicsRootDescriptorTable(2, textureManager->GetSrvHandleGPU(subMesh.texture.GetIndex()));
+		commandList->SetGraphicsRootConstantBufferView(Object3dCommon::kRootIndexSurfaceMaterial, subMesh.surfaceResource->GetGPUVirtualAddress());
+		for (UINT i = 0; i < Object3dCommon::kMaterialTextureCount; ++i) {
+			commandList->SetGraphicsRootDescriptorTable(Object3dCommon::kRootIndexMaterialTextures + i,
+			                                            textureManager->GetSrvHandleGPU(subMesh.materialTextures[i].GetIndex()));
+		}
 		commandList->DrawInstanced(subMesh.vertexCount, instanceCount, subMesh.startVertex, 0);
 	}
 
@@ -136,6 +152,29 @@ MaterialData Model::LoadMaterialTemplateFile(const std::string& directoryPath, c
 			s >> textureFilename;
 
 			materialData.textureFilePath = directoryPath + "/" + textureFilename;
+		} else if (identifier == "map_Bump" || identifier == "map_bump" || identifier == "bump" || identifier == "norm") {
+			// 例: map_Bump -bm 1.000000 normal.png（-bm の後は強さ。ほかの -xx は読み飛ばす）
+			std::string token;
+			while (s >> token) {
+				if (token == "-bm") {
+					s >> materialData.normalStrength;
+				} else if (!token.empty() && token[0] == '-') {
+					std::string skipped;
+					s >> skipped;
+				} else {
+					materialData.normalMapFilePath = directoryPath + "/" + token;
+				}
+			}
+		} else if (identifier == "map_Ke") {
+			std::string textureFilename;
+			s >> textureFilename;
+			materialData.emissiveMapFilePath = directoryPath + "/" + textureFilename;
+		} else if (identifier == "Ke") {
+			s >> materialData.emissive.x >> materialData.emissive.y >> materialData.emissive.z;
+		} else if (identifier == "Pm") {
+			s >> materialData.metallic;
+		} else if (identifier == "Pr") {
+			s >> materialData.roughness;
 		}
 	}
 	return materialData;
@@ -206,4 +245,142 @@ ModelData Model::LoadObjFile(const std::string& directoryPath, const std::string
 		}
 	}
 	return modelData;
+}
+
+// ===== 材質 =====
+
+void Model::InitializeSurface(SubMesh& subMesh) {
+	subMesh.surfaceResource = dxCommon->CreatBufferResource(sizeof(SurfaceMaterial));
+	Logger::CheckHResult(subMesh.surfaceResource->Map(0, nullptr, reinterpret_cast<void**>(&subMesh.surface)), "Model: Map surfaceResource");
+	*subMesh.surface = SurfaceMaterial{};
+	// 使わない画像の枠にも何か入れておく必要があるので白（flags で使わないことにしてある）
+	for (TextureHandle& texture : subMesh.materialTextures) {
+		texture = TextureManager::GetInstance()->Acquire("white");
+	}
+}
+
+template <typename Function>
+void Model::ForEachPart(int part, Function function) {
+	if (part >= 0) {
+		if (static_cast<size_t>(part) < subMeshes.size()) {
+			function(subMeshes[static_cast<size_t>(part)]);
+		} else {
+			Logger::Log("Model: 部分の番号が範囲外です\n");
+		}
+		return;
+	}
+	for (SubMesh& subMesh : subMeshes) {
+		function(subMesh);
+	}
+}
+
+void Model::SetMaterialTexture(int part, MaterialTextureSlot slot, const std::string& textureName, uint32_t flag) {
+	ForEachPart(part, [&](SubMesh& subMesh) {
+		subMesh.materialTextures[slot] = TextureManager::GetInstance()->Acquire(textureName);
+		subMesh.surface->flags |= flag;
+	});
+}
+
+void Model::SetNormalMap(const std::string& filePath, float strength, int part) {
+	SetMaterialTexture(part, kNormalSlot, TextureManager::GetInstance()->LoadDataTexture(filePath), SurfaceMaterialFlags::kNormalMap);
+	ForEachPart(part, [&](SubMesh& subMesh) { subMesh.surface->normalStrength = strength; });
+}
+
+void Model::SetMetallicRoughnessMap(const std::string& filePath, int part) {
+	SetMaterialTexture(part, kMetallicRoughnessSlot, TextureManager::GetInstance()->LoadDataTexture(filePath),
+	                   SurfaceMaterialFlags::kMetallicRoughnessMap | SurfaceMaterialFlags::kPhysicalLighting);
+}
+
+void Model::SetEmissiveMap(const std::string& filePath, int part) {
+	// 発光の画像は色の画像なので、普通に読む
+	TextureManager::GetInstance()->LoadTexture(filePath);
+	SetMaterialTexture(part, kEmissiveSlot, filePath, SurfaceMaterialFlags::kEmissiveMap);
+}
+
+void Model::SetOcclusionMap(const std::string& filePath, float strength, int part) {
+	SetMaterialTexture(part, kOcclusionSlot, TextureManager::GetInstance()->LoadDataTexture(filePath), SurfaceMaterialFlags::kOcclusionMap);
+	ForEachPart(part, [&](SubMesh& subMesh) { subMesh.surface->occlusionStrength = strength; });
+}
+
+void Model::SetMetallic(float metallic, int part) {
+	ForEachPart(part, [&](SubMesh& subMesh) {
+		subMesh.surface->metallic = std::clamp(metallic, 0.0f, 1.0f);
+		subMesh.surface->flags |= SurfaceMaterialFlags::kPhysicalLighting;
+	});
+}
+
+void Model::SetRoughness(float roughness, int part) {
+	ForEachPart(part, [&](SubMesh& subMesh) {
+		subMesh.surface->roughness = std::clamp(roughness, 0.0f, 1.0f);
+		subMesh.surface->flags |= SurfaceMaterialFlags::kPhysicalLighting;
+	});
+}
+
+void Model::SetEmissive(const Vector3& color, float intensity, int part) {
+	ForEachPart(part, [&](SubMesh& subMesh) { subMesh.surface->emissive = { color.x * intensity, color.y * intensity, color.z * intensity, 0.0f }; });
+}
+
+void Model::SetPhysicalLighting(bool enable, int part) {
+	ForEachPart(part, [&](SubMesh& subMesh) {
+		if (enable) {
+			subMesh.surface->flags |= SurfaceMaterialFlags::kPhysicalLighting;
+		} else {
+			subMesh.surface->flags &= ~SurfaceMaterialFlags::kPhysicalLighting;
+		}
+	});
+}
+
+SurfaceMaterial& Model::GetSurfaceMaterial(size_t part) {
+	return *subMeshes[part < subMeshes.size() ? part : 0].surface;
+}
+
+void Model::ApplyMaterialData(const MaterialData& material) {
+	if (!material.normalMapFilePath.empty()) {
+		SetNormalMap(material.normalMapFilePath, material.normalStrength);
+	}
+	if (!material.emissiveMapFilePath.empty()) {
+		SetEmissiveMap(material.emissiveMapFilePath);
+		// 画像だけで色が書かれていなければ、画像の色そのままで光る
+		if (material.emissive.x == 0.0f && material.emissive.y == 0.0f && material.emissive.z == 0.0f) {
+			SetEmissive({ 1.0f, 1.0f, 1.0f });
+		}
+	}
+	if (material.emissive.x != 0.0f || material.emissive.y != 0.0f || material.emissive.z != 0.0f) {
+		SetEmissive(material.emissive);
+	}
+	if (material.metallic >= 0.0f) {
+		SetMetallic(material.metallic);
+	}
+	if (material.roughness >= 0.0f) {
+		SetRoughness(material.roughness);
+	}
+}
+
+void Model::ApplyGltfMaterial(SubMesh& subMesh, const GltfModelData& data, int32_t materialIndex) {
+	SurfaceMaterial& surface = *subMesh.surface;
+	// glTF は金属・粗さで作られているので、その当たり方にする
+	surface.flags |= SurfaceMaterialFlags::kPhysicalLighting;
+	if (materialIndex < 0 || static_cast<size_t>(materialIndex) >= data.materials.size()) {
+		surface.metallic = 0.0f;
+		surface.roughness = 1.0f; // マテリアルの無い glTF の既定（白・金属でない・ざらざら）
+		return;
+	}
+	const GltfMaterial& material = data.materials[static_cast<size_t>(materialIndex)];
+	surface.metallic = material.metallicFactor;
+	surface.roughness = material.roughnessFactor;
+	surface.normalStrength = material.normalScale;
+	surface.occlusionStrength = material.occlusionStrength;
+	surface.emissive = { material.emissiveFactor.x, material.emissiveFactor.y, material.emissiveFactor.z, 0.0f };
+	TextureManager* textureManager = TextureManager::GetInstance();
+	auto useImage = [&](int32_t imageIndex, bool isData, MaterialTextureSlot slot, uint32_t flag) {
+		const std::string name = GltfLoader::LoadImageTexture(data, imageIndex, isData);
+		if (!name.empty()) {
+			subMesh.materialTextures[slot] = textureManager->Acquire(name);
+			surface.flags |= flag;
+		}
+	};
+	useImage(material.normalImageIndex, true, kNormalSlot, SurfaceMaterialFlags::kNormalMap);
+	useImage(material.metallicRoughnessImageIndex, true, kMetallicRoughnessSlot, SurfaceMaterialFlags::kMetallicRoughnessMap);
+	useImage(material.emissiveImageIndex, false, kEmissiveSlot, SurfaceMaterialFlags::kEmissiveMap);
+	useImage(material.occlusionImageIndex, true, kOcclusionSlot, SurfaceMaterialFlags::kOcclusionMap);
 }

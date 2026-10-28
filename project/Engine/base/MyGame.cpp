@@ -18,7 +18,7 @@ void MyGame::Initialize() {
 
 	// 最初のアクティブシーンを設定
 	// ※スキニング検証(SkinningTestScene)を試す場合は、ここを一時的に"SKINNING_TEST"に変更してください（恒久変更はしないこと）
-	sceneManager->ChangeScene("RIGIDBODY_TEST");
+	sceneManager->ChangeScene("MATERIAL_TEST");
 }
 
 void MyGame::Update() {

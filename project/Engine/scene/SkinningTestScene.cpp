@@ -24,14 +24,15 @@ std::vector<VertexData> SkinningTestScene::BuildFloorVertices() const {
     Vector4 posTL = { -kFloorHalfSize, kFloorY,  kFloorHalfSize, 1.0f };
     Vector3 up = { 0.0f, 1.0f, 0.0f };
 
+    // 上から見て時計回り（Object3d の PSO は時計回りを表面にしている。反時計回りだと裏として消える）
     std::vector<VertexData> vertices;
     vertices.push_back(VertexData{ posBL, { 0.0f, 1.0f }, up });
-    vertices.push_back(VertexData{ posBR, { 1.0f, 1.0f }, up });
     vertices.push_back(VertexData{ posTR, { 1.0f, 0.0f }, up });
+    vertices.push_back(VertexData{ posBR, { 1.0f, 1.0f }, up });
 
     vertices.push_back(VertexData{ posBL, { 0.0f, 1.0f }, up });
-    vertices.push_back(VertexData{ posTR, { 1.0f, 0.0f }, up });
     vertices.push_back(VertexData{ posTL, { 0.0f, 0.0f }, up });
+    vertices.push_back(VertexData{ posTR, { 1.0f, 0.0f }, up });
 
     return vertices;
 }

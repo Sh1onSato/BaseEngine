@@ -22,6 +22,8 @@ void Object3d::Initialize(Object3dCommon* common) {
     wvpData->World = Calculation::MakeIdentity4x4();
     wvpData->WVP = Calculation::MakeIdentity4x4();
 
+    // 新しく足した項目（発光・金属/粗さの上書き）も既定値にする（GPU のメモリはそのままだと中身が決まっていない）
+    *materialData = Material{};
     materialData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
     materialData->enableLighting = 1;
     materialData->uvTransform = Calculation::MakeIdentity4x4();

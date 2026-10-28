@@ -16,6 +16,7 @@
 #include "AnimationTestScene.h"
 #include "TweenTestScene.h"
 #include "RigidbodyTestScene.h"
+#include "MaterialTestScene.h"
 #include "Logger.h"
 #include <format>
 
@@ -89,6 +90,10 @@ BaseScene* SceneFactory::CreateScene(const std::string& sceneName) {
     else if (sceneName == "RIGIDBODY_TEST") {
         // 回転する剛体（積んだ箱・ドミノ・転がる球）の検証用シーン
         newScene = new RigidbodyTestScene();
+    }
+    else if (sceneName == "MATERIAL_TEST") {
+        // 材質（金属・粗さ・法線マップ・発光）の検証用シーン
+        newScene = new MaterialTestScene();
     }
     else {
         // 該当なしの場合は無言でnullptrを返すと「シーンが何も更新・描画されない」という

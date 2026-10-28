@@ -33,6 +33,13 @@ public:
     // インスタンスデータ（t3、ルートSRV）を置くルートパラメータの番号（通常パス / 影パス）
     static constexpr UINT kRootIndexInstances = 9;
     static constexpr UINT kShadowRootIndexInstances = 2;
+    // 材質（Model::Draw が部分ごとにセットする）: b6 の部分ごとの材質と、t4〜t7 の画像（法線・金属/粗さ・発光・影の順）
+    static constexpr UINT kRootIndexSurfaceMaterial = 10;
+    static constexpr UINT kRootIndexMaterialTextures = 11;
+    static constexpr UINT kMaterialTextureCount = 4;
+    // カメラの位置（b7）
+    static constexpr UINT kRootIndexCamera = kRootIndexMaterialTextures + kMaterialTextureCount;
+    static constexpr UINT kRootParameterCount = kRootIndexCamera + 1;
 
     DirectXCommon* GetDxCommon() const { return dxCommon; }
 
@@ -124,5 +131,9 @@ private:
 
     // スキニング未使用のObject3d用デフォルトボーンパレット（単位行列1個ぶん）
     Microsoft::WRL::ComPtr<ID3D12Resource> defaultBonePaletteResource;
+
+    // カメラの位置（PreDraw でアクティブなカメラから書く）
+    Microsoft::WRL::ComPtr<ID3D12Resource> cameraResource;
+    CameraForGPU* cameraData = nullptr;
 };
 

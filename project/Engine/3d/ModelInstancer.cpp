@@ -46,6 +46,7 @@ void ModelInstancer::Initialize(Model* newModel, size_t initialCapacity) {
     materialResource = dxCommon->CreatBufferResource(sizeof(Material));
     Logger::CheckHResult(materialResource->Map(0, nullptr, reinterpret_cast<void**>(&materialData)),
                          "ModelInstancer: Map materialResource");
+    *materialData = Material{}; // 発光・金属/粗さの上書きも既定値に
     materialData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
     materialData->enableLighting = 1;
     materialData->uvTransform = Calculation::MakeIdentity4x4();
