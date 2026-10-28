@@ -1,11 +1,25 @@
 #include "ShaderCompiler.h"
+#include <filesystem>
 using namespace Logger;
 using namespace StringUtility;
 
 namespace ShaderCompiler{
+	std::wstring ResolveShaderPath(const std::wstring& filePath) {
+		if (std::filesystem::exists(filePath)) {
+			return filePath;
+		}
+#ifdef ENGINE_ROOT_DIR
+		const std::wstring enginePath = ConvertString(std::string(ENGINE_ROOT_DIR)) + filePath;
+		if (std::filesystem::exists(enginePath)) {
+			return enginePath;
+		}
+#endif
+		return filePath; // どちらにも無ければそのまま（読めずにエラーになる）
+	}
+
 	Microsoft::WRL::ComPtr<IDxcBlob> CompileShader(
 		// CompileするShaderのファイルへのパス
-		const std::wstring& filePath,
+		const std::wstring& requestedFilePath,
 		// Compileに使用するProfilae
 		const wchar_t* profile,
 		// 初期化で生成したものを3つ
@@ -14,6 +28,7 @@ namespace ShaderCompiler{
 		IDxcIncludeHandler* includeHandler,
 		std::ostream& os)
 	{
+		const std::wstring filePath = ResolveShaderPath(requestedFilePath);
 		// ここからシェーダーをコンパイルする旨をログに出す
 		Log(os, ConvertString(std::format(L"Begin CompileShader,path:{}\n", filePath, profile)));
 		// hlslファイルを読む

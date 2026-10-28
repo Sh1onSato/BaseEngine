@@ -17,7 +17,13 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "DirectXTex", "externals\Dir
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "imgui", "externals\imgui\imgui.vcxproj", "{0CD1C5F7-251B-431F-B3F6-A134420534BB}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Engine", "Engine.vcxitems", "{7EF87AE2-9BBA-462B-8C75-8F29FF92DF72}"
+EndProject
 Global
+	GlobalSection(SharedMSBuildProjectFiles) = preSolution
+		Engine.vcxitems*{04440f24-6aac-4fe2-96f7-0fd53439d837}*SharedItemsImports = 4
+		Engine.vcxitems*{7ef87ae2-9bba-462b-8c75-8f29ff92df72}*SharedItemsImports = 9
+	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
 		Development|x64 = Development|x64

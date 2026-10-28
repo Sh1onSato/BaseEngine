@@ -10,6 +10,10 @@
 #include "StringUtility.h"
 
 namespace ShaderCompiler{
+	// シェーダーのファイルの場所を決める。今のフォルダ（ゲームのフォルダ）に無ければ、エンジンのフォルダ（ENGINE_ROOT_DIR）の物を使う。
+	// エンジンのシェーダーを、ゲームのフォルダにコピーしなくても使えるようにするため（ゲームで同じ名前のファイルを置けば、そちらが優先）
+	std::wstring ResolveShaderPath(const std::wstring& filePath);
+
 	Microsoft::WRL::ComPtr<IDxcBlob> CompileShader(
 		// CompileするShaderのファイルへのパス
 		const std::wstring& filePath,
