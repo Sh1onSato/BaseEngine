@@ -87,6 +87,11 @@ public:
     void SetOffset(const Vector3& newOffset) { offset = newOffset; }
     const Vector3& GetOffset() const { return offset; }
 
+    // AABB・OBB の大きさ（中心から各面までの距離）を後から変える（しゃがむなど）。
+    // 中心は変わらないので、足元をそろえたいときは持ち主の位置か offset も合わせて動かす
+    void SetHalfSize(const Vector3& newHalfSize) { halfSize = newHalfSize; }
+    const Vector3& GetHalfSize() const { return halfSize; }
+
     // false にすると当たり判定から外れる（当たっていた相手には次の判定で Exit が届く）
     void SetEnabled(bool enabled) { isEnabled = enabled; }
     bool IsEnabled() const { return isEnabled; }
